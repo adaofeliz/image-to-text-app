@@ -83,3 +83,10 @@ uvloop==0.22.1
 watchfiles==1.1.1
 wcwidth==0.2.14
 websockets==15.0.1
+PyJWT==2.9.0
+passlib[bcrypt]==1.7.4
+bcrypt>=4.0.0
+python-jose[cryptography]==3.3.0
+sqlalchemy==2.0.35
+asyncpg==0.29.0
+email-validator==2.2.0

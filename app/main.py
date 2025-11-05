@@ -1,6 +1,7 @@
 """Main FastAPI application entry point."""
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -9,18 +10,28 @@ from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from app.database import init_db
 from app.routes import router as api_router
 
 
 load_dotenv()
 
 
-APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
-APP_PORT = int(os.getenv("APP_PORT", "8000"))
-DEBUG = os.getenv("APP_DEBUG", "false").lower() in ("1", "true", "yes")
+APP_HOST = os.getenv("APP_HOST")
+APP_PORT = int(os.getenv("APP_PORT"))
+DEBUG = os.getenv("APP_DEBUG")
 
 
-app = FastAPI(title="Image to Text API")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Lifespan event handler for startup and shutdown events."""
+    await init_db()
+    print("Database initialized!")
+    yield
+    print("Shutting down...")
+
+
+app = FastAPI(title="Image to Text API", lifespan=lifespan)
 
 
 app.add_middleware(
@@ -30,7 +41,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 
 app.include_router(api_router)
