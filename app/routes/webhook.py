@@ -50,7 +50,7 @@ async def deploy_webhook(  # pylint: disable=unused-argument
         # Try multiple possible locations for deploy.sh
         # Priority: mounted volume path, then project root, then current directory
         possible_paths = [
-            Path("/app/deploy.sh"),  # If running in Docker with mounted volume
+            Path("/app/project/deploy.sh"),  # If running in Docker with mounted volume
             project_root / "deploy.sh",  # Standard location (relative to webhook.py)
             Path.cwd() / "deploy.sh",  # Current working directory
         ]
@@ -82,8 +82,8 @@ async def deploy_webhook(  # pylint: disable=unused-argument
 
         # Execute deployment script asynchronously
         # Note: Script must be executable on the host since it's mounted read-only
-        # Run from /app directory where .git is mounted
-        script_working_dir = Path("/app") if deploy_script == Path("/app/deploy.sh") else str(project_root)
+        # Run from /app/project directory where the entire project is mounted
+        script_working_dir = Path("/app/project") if str(deploy_script).startswith("/app/project") else str(project_root)
         logger.info("Executing deployment script: %s (cwd: %s)", deploy_script, script_working_dir)
         process = await asyncio.create_subprocess_exec(
             str(deploy_script),

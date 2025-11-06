@@ -26,11 +26,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
-      - ./deploy.sh:/app/deploy.sh:ro
-      - ./docker-compose.yml:/app/docker-compose.yml:ro
-      - ./docker-compose.prod.yml:/app/docker-compose.prod.yml:ro
-      - ./.git:/app/.git
-      - ./.env:/app/.env:ro
+      - .:/app/project
       - /var/run/docker.sock:/var/run/docker.sock
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
