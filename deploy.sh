@@ -76,5 +76,3 @@ else
     echo "   Check service status with: $DOCKER_COMPOSE -f $COMPOSE_FILE ps"
     echo "   View logs with: $DOCKER_COMPOSE -f $COMPOSE_FILE logs"
 fi
-
-
