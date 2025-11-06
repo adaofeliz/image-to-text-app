@@ -47,25 +47,7 @@ else
     exit 1
 fi
 
-# Stop existing containers and clean up all resources
-echo "🛑 Stopping existing containers and cleaning up resources..."
-$DOCKER_COMPOSE -f $COMPOSE_FILE down --remove-orphans --volumes 2>/dev/null || true
-
-# Force remove any conflicting containers by name pattern (Ubuntu/Linux compatible)
-echo "🧹 Force removing any conflicting containers..."
-$DOCKER_CMD ps -a --filter "name=postgres" --format "{{.Names}}" 2>/dev/null | while read -r container; do
-    [ -n "$container" ] && $DOCKER_CMD rm -f "$container" 2>/dev/null || true
-done || true
-
-$DOCKER_CMD ps -a --filter "name=web" --format "{{.Names}}" 2>/dev/null | while read -r container; do
-    [ -n "$container" ] && $DOCKER_CMD rm -f "$container" 2>/dev/null || true
-done || true
-
-$DOCKER_CMD ps -a --filter "name=project-" --format "{{.Names}}" 2>/dev/null | while read -r container; do
-    [ -n "$container" ] && $DOCKER_CMD rm -f "$container" 2>/dev/null || true
-done || true
-
-# Stop any containers using port 8000 (Ubuntu/Linux compatible)
+# Only clean up containers that might conflict with port 8000
 echo "🔌 Checking for containers using port 8000..."
 $DOCKER_CMD ps --filter "publish=8000" --format "{{.ID}}" 2>/dev/null | while read -r container; do
     if [ -n "$container" ]; then
@@ -75,21 +57,9 @@ $DOCKER_CMD ps --filter "publish=8000" --format "{{.ID}}" 2>/dev/null | while re
     fi
 done || true
 
-# Also check stopped containers using port 8000
-$DOCKER_CMD ps -a --filter "publish=8000" --format "{{.ID}}" 2>/dev/null | while read -r container; do
-    [ -n "$container" ] && $DOCKER_CMD rm -f "$container" 2>/dev/null || true
-done || true
-
-# Remove any orphaned networks
-echo "🌐 Cleaning up orphaned networks..."
-$DOCKER_CMD network prune -f 2>/dev/null || true
-
-# Wait a moment for cleanup to complete
-sleep 2
-
-# Build and start services
-echo "🔨 Building and starting services..."
-$DOCKER_COMPOSE -f $COMPOSE_FILE up -d --build
+# Build and recreate services with latest code
+echo "🔨 Building and starting services with latest code..."
+$DOCKER_COMPOSE -f $COMPOSE_FILE up -d --build --force-recreate
 echo "✅ $ENVIRONMENT deployment complete!"
 echo "📊 Checking service status..."
 $DOCKER_COMPOSE -f $COMPOSE_FILE ps
