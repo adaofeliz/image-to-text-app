@@ -82,13 +82,15 @@ async def deploy_webhook(  # pylint: disable=unused-argument
 
         # Execute deployment script asynchronously
         # Note: Script must be executable on the host since it's mounted read-only
-        logger.info("Executing deployment script: %s", deploy_script)
+        # Run from /app directory where .git is mounted
+        script_working_dir = Path("/app") if deploy_script == Path("/app/deploy.sh") else str(project_root)
+        logger.info("Executing deployment script: %s (cwd: %s)", deploy_script, script_working_dir)
         process = await asyncio.create_subprocess_exec(
             str(deploy_script),
             environment,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            cwd=str(project_root),
+            cwd=str(script_working_dir),
         )
 
         # Read output and wait for process to complete

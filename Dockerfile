@@ -6,6 +6,7 @@ WORKDIR /app
 # install build dependencies and system libraries for OpenCV/PaddleOCR
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    git \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
