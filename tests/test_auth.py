@@ -48,6 +48,10 @@ async def test_login_success(
     assert "access_token" in data
     assert "refresh_token" in data
     assert data["token_type"] == "bearer"
+    assert "name" in data
+    assert data["name"] == test_user_data["name"]
+    assert "user_id" in data
+    assert data["user_id"] == str(registered_user.id)
 
 
 @pytest.mark.asyncio

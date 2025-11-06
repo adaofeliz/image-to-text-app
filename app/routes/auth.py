@@ -186,7 +186,10 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
         logger.info("Login successful: %s (ID: %s)", credentials.email, user.id)
 
         return TokenResponse(
-            access_token=access_token, refresh_token=user_refresh_token
+            access_token=access_token,
+            refresh_token=user_refresh_token,
+            name=str(user.name),  # type: ignore[arg-type]
+            user_id=str(user.id),
         )
     except HTTPException:
         raise
@@ -317,7 +320,12 @@ async def refresh_token(
 
         logger.info("Token refreshed successfully for user: %s", user_id)
 
-        return TokenResponse(access_token=access_token, refresh_token=token)
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=token,
+            name=str(user.name),  # type: ignore[arg-type]
+            user_id=str(user.id),
+        )
     except HTTPException:
         raise
     except Exception as exc:  # pylint: disable=broad-exception-caught
