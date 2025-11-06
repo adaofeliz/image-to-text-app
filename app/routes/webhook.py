@@ -30,7 +30,7 @@ def verify_deploy_token(token: str = Query(..., description="Deployment token"))
     return token
 
 
-@router.get("/webhook/deploy", status_code=status.HTTP_200_OK)
+@router.post("/webhook/deploy", status_code=status.HTTP_200_OK)
 async def deploy_webhook(  # pylint: disable=unused-argument
     environment: str = Query("production", description="Deployment environment"),
     _token: str = Depends(verify_deploy_token),
@@ -122,7 +122,7 @@ async def deploy_webhook(  # pylint: disable=unused-argument
         ) from exc
 
 
-@router.get("/webhook/git/pull", status_code=status.HTTP_200_OK)
+@router.post("/webhook/git/pull", status_code=status.HTTP_200_OK)
 async def git_pull_webhook(  # pylint: disable=unused-argument
     _token: str = Depends(verify_deploy_token),
 ):
