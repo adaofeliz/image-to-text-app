@@ -28,6 +28,7 @@ from app.utils import (
     get_password_hash,
     verify_password,
 )
+from app.utils.logger import logger
 from app.database import TokenBlacklist, User, get_db
 from app.dependencies import get_current_user
 
@@ -42,10 +43,23 @@ def send_verification_email(email: str, verification_token: str):
     """Send verification email to user."""
 
     smtp_server = os.getenv("SMTP_SERVER")
-    smtp_port = int(os.getenv("SMTP_PORT"))
+    smtp_port_str = os.getenv("SMTP_PORT")
     smtp_username = os.getenv("SMTP_USERNAME")
     smtp_password = os.getenv("SMTP_PASSWORD")
     app_url = os.getenv("APP_URL")
+
+    if not smtp_server:
+        raise ValueError("SMTP_SERVER environment variable is not set")
+    if not smtp_port_str:
+        raise ValueError("SMTP_PORT environment variable is not set")
+    if not smtp_username:
+        raise ValueError("SMTP_USERNAME environment variable is not set")
+    if not smtp_password:
+        raise ValueError("SMTP_PASSWORD environment variable is not set")
+    if not app_url:
+        raise ValueError("APP_URL environment variable is not set")
+
+    smtp_port = int(smtp_port_str)
 
     try:
         verification_url = f"{app_url}/auth/verify-email?token={verification_token}"
@@ -65,76 +79,125 @@ def send_verification_email(email: str, verification_token: str):
             server.starttls()
             server.login(smtp_username, smtp_password)
             server.send_message(msg)
-    except Exception as e:
-        print(f"Failed to send email: {e}")
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error(
+            "Failed to send verification email to %s: %s", email, e, exc_info=True
+        )
 
 
 @router.post(
     "/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED
 )
 async def register(user_data: UserRegister, db: AsyncSession = Depends(get_db)):
-    """Register a new user."""
-    # Check if user already exists
-    stmt = select(User).where(User.email == user_data.email)
-    result = await db.execute(stmt)
-    existing_user = result.scalar_one_or_none()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered",
+    """Register a new user"""
+    try:
+        logger.info("Registration attempt for email: %s", user_data.email)
+
+        # Check if user already exists
+        stmt = select(User).where(User.email == user_data.email)
+        result = await db.execute(stmt)
+        existing_user = result.scalar_one_or_none()
+        if existing_user:
+            logger.warning(
+                "Registration failed: Email already registered - %s", user_data.email
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered",
+            )
+
+        # Create new user
+        verification_token = generate_verification_token()
+        hashed_password = get_password_hash(user_data.password)
+
+        new_user = User(
+            name=user_data.name,
+            email=user_data.email,
+            hashed_password=hashed_password,
+            is_verified=False,
+            verification_token=verification_token,
         )
 
-    # Create new user
-    verification_token = generate_verification_token()
-    hashed_password = get_password_hash(user_data.password)
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
 
-    new_user = User(
-        name=user_data.name,
-        email=user_data.email,
-        hashed_password=hashed_password,
-        is_verified=False,
-        verification_token=verification_token,
-    )
+        # Send verification email
+        send_verification_email(user_data.email, verification_token)
 
-    db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
+        logger.info(
+            "User registered successfully: %s (ID: %s)", user_data.email, new_user.id
+        )
 
-    # Send verification email
-    send_verification_email(user_data.email, verification_token)
-
-    return MessageResponse(
-        message="User registered successfully. Please check your email to verify your account."
-    )
+        return MessageResponse(
+            message="User registered successfully. Please check your email to verify your account."
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error(
+            "Registration error for email %s: %s", user_data.email, exc, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Registration failed",
+        ) from exc
 
 
 @router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
 async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     """Login user and return access and refresh tokens."""
-    # Find user by email
-    stmt = select(User).where(User.email == credentials.email)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
+    try:
+        logger.info("Login attempt for email: %s", credentials.email)
 
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+        # Find user by email
+        stmt = select(User).where(User.email == credentials.email)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+
+        if not user:
+            logger.warning("Login failed: User not found - %s", credentials.email)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+            )
+        hashed_password = user.hashed_password
+
+        if hashed_password is None:
+            logger.warning("Login failed: User has no password - %s", credentials.email)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+            )
+
+        # Verify password
+        if not verify_password(credentials.password, str(hashed_password)):  # type: ignore[arg-type]
+            logger.warning("Login failed: Invalid password - %s", credentials.email)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+            )
+
+        # Create tokens
+        user_id = str(user.id)
+        access_token = create_access_token(data={"sub": user_id})
+        user_refresh_token = create_refresh_token(data={"sub": user_id})
+
+        logger.info("Login successful: %s (ID: %s)", credentials.email, user.id)
+
+        return TokenResponse(
+            access_token=access_token, refresh_token=user_refresh_token
         )
-
-    # Verify password
-    if not verify_password(credentials.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+    except HTTPException:
+        raise
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error(
+            "Login error for email %s: %s", credentials.email, exc, exc_info=True
         )
-
-    # Create tokens
-    user_id = str(user.id)
-    access_token = create_access_token(data={"sub": user_id})
-    user_refresh_token = create_refresh_token(data={"sub": user_id})
-
-    return TokenResponse(access_token=access_token, refresh_token=user_refresh_token)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Login failed",
+        ) from exc
 
 
 @router.get(
@@ -142,26 +205,43 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
 )
 async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
     """Verify user email with verification token from query parameter."""
-    stmt = select(User).where(User.verification_token == token)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
+    try:
+        logger.info("Email verification attempt with token: %s...", token[:10])
 
-    if not user:
+        stmt = select(User).where(User.verification_token == token)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+
+        if not user:
+            logger.warning(
+                "Email verification failed: Invalid token - %s...", token[:10]
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid verification token",
+            )
+
+        if bool(user.is_verified):
+            logger.info("Email already verified: %s", user.email)
+            return MessageResponse(message="Email already verified")
+
+        # Update user as verified
+        user.is_verified = True  # type: ignore[assignment]
+        user.verification_token = None  # type: ignore[assignment]
+        user.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+        await db.commit()
+
+        logger.info("Email verified successfully: %s (ID: %s)", user.email, user.id)
+
+        return MessageResponse(message="Email verified successfully")
+    except HTTPException:
+        raise
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error("Email verification error: %s", exc, exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid verification token",
-        )
-
-    if user.is_verified:
-        return MessageResponse(message="Email already verified")
-
-    # Update user as verified
-    user.is_verified = True
-    user.verification_token = None
-    user.updated_at = datetime.now(timezone.utc)
-    await db.commit()
-
-    return MessageResponse(message="Email verified successfully")
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Email verification failed",
+        ) from exc
 
 
 @router.post("/refresh", response_model=TokenResponse, status_code=status.HTTP_200_OK)
@@ -169,65 +249,83 @@ async def refresh_token(
     request: RefreshTokenRequest, db: AsyncSession = Depends(get_db)
 ):
     """Refresh access token using refresh token. Requires valid refresh token."""
-    token = request.refresh_token
-
-    # Check if token is blacklisted
-    stmt = select(TokenBlacklist).where(TokenBlacklist.token == token)
-    result = await db.execute(stmt)
-    blacklisted = result.scalar_one_or_none()
-    if blacklisted:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token has been revoked",
-        )
-
-    # Decode refresh token
-    payload = decode_token(token)
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired refresh token",
-        )
-
-    # Check token type
-    if payload.get("type") != "refresh":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token.",
-        )
-
-    # Get user ID from token
-    user_id_str = payload.get("sub")
-    if not user_id_str:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
-        )
-
     try:
-        user_id = UUID(user_id_str)
-    except ValueError as exc:
+        token = request.refresh_token
+        logger.info("Token refresh attempt")
+
+        # Check if token is blacklisted
+        stmt = select(TokenBlacklist).where(TokenBlacklist.token == token)
+        result = await db.execute(stmt)
+        blacklisted = result.scalar_one_or_none()
+        if blacklisted:
+            logger.warning("Token refresh failed: Token blacklisted")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token has been revoked",
+            )
+
+        # Decode refresh token
+        payload = decode_token(token)
+        if payload is None:
+            logger.warning("Token refresh failed: Invalid or expired token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired refresh token",
+            )
+
+        # Check token type
+        if payload.get("type") != "refresh":
+            logger.warning("Token refresh failed: Invalid token type")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token.",
+            )
+
+        # Get user ID from token
+        user_id_str = payload.get("sub")
+        if not user_id_str:
+            logger.warning("Token refresh failed: Missing user ID in token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token payload",
+            )
+
+        try:
+            user_id = UUID(user_id_str)
+        except ValueError as exc:
+            logger.warning(
+                "Token refresh failed: Invalid user ID format - %s", user_id_str
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid User ID",
+            ) from exc
+
+        # Verify user exists
+        stmt = select(User).where(User.id == user_id)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+        if not user:
+            logger.warning("Token refresh failed: User not found - %s", user_id)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+            )
+
+        # Create new access token
+        access_token = create_access_token(data={"sub": user_id_str})
+
+        logger.info("Token refreshed successfully for user: %s", user_id)
+
+        return TokenResponse(access_token=access_token, refresh_token=token)
+    except HTTPException:
+        raise
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error("Token refresh error: %s", exc, exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid User ID",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token refresh failed",
         ) from exc
-
-    # Verify user exists
-    stmt = select(User).where(User.id == user_id)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-
-    # Create new access token
-    access_token = create_access_token(data={"sub": user_id_str})
-
-    return TokenResponse(
-        access_token=access_token, refresh_token=token
-    )
 
 
 @router.post("/logout", response_model=MessageResponse, status_code=status.HTTP_200_OK)
@@ -238,43 +336,62 @@ async def logout(
     db: AsyncSession = Depends(get_db),
 ):
     """Logout user by blacklisting access and refresh tokens."""
-    access_token = credentials.credentials
-    user_refresh_token = request.refresh_token
+    try:
+        logger.info(
+            "Logout attempt for user: %s (ID: %s)", current_user.email, current_user.id
+        )
 
-    # Blacklist access token
-    if access_token:
-        payload = decode_token(access_token)
-        if payload:
-            exp_timestamp = payload.get("exp")
-            if exp_timestamp:
-                expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
-            else:
-                expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        access_token = credentials.credentials
+        user_refresh_token = request.refresh_token
 
-            blacklist_entry = TokenBlacklist(
-                token=access_token,
-                user_id=current_user.id,
-                expires_at=expires_at,
-            )
-            db.add(blacklist_entry)
+        # Blacklist access token
+        if access_token:
+            payload = decode_token(access_token)
+            if payload:
+                exp_timestamp = payload.get("exp")
+                if exp_timestamp:
+                    expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
+                else:
+                    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
 
-    # Blacklist refresh token
-    if user_refresh_token:
-        payload = decode_token(user_refresh_token)
-        if payload:
-            exp_timestamp = payload.get("exp")
-            if exp_timestamp:
-                expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
-            else:
-                expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+                blacklist_entry = TokenBlacklist(
+                    token=access_token,
+                    user_id=current_user.id,
+                    expires_at=expires_at,
+                )
+                db.add(blacklist_entry)
 
-            blacklist_entry = TokenBlacklist(
-                token=user_refresh_token,
-                user_id=current_user.id,
-                expires_at=expires_at,
-            )
-            db.add(blacklist_entry)
+        # Blacklist refresh token
+        if user_refresh_token:
+            payload = decode_token(user_refresh_token)
+            if payload:
+                exp_timestamp = payload.get("exp")
+                if exp_timestamp:
+                    expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
+                else:
+                    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
 
-    await db.commit()
+                blacklist_entry = TokenBlacklist(
+                    token=user_refresh_token,
+                    user_id=current_user.id,
+                    expires_at=expires_at,
+                )
+                db.add(blacklist_entry)
 
-    return MessageResponse(message="Logged out successfully.")
+        await db.commit()
+
+        logger.info(
+            "User logged out successfully: %s (ID: %s)",
+            current_user.email,
+            current_user.id,
+        )
+
+        return MessageResponse(message="Logged out successfully. Tokens revoked.")
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error(
+            "Logout error for user %s: %s", current_user.email, exc, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Logout failed",
+        ) from exc

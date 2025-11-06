@@ -1,0 +1,9 @@
+[MESSAGES CONTROL]
+disable=
+    redefined-outer-name,
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    broad-exception-caught,
+    no-member
+

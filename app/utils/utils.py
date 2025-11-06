@@ -5,6 +5,8 @@ from pathlib import Path
 import numpy as np
 from fastapi import HTTPException, UploadFile
 
+from app.utils.logger import logger
+
 
 def convert_numpy_to_python(obj):
     """Convert numpy arrays and types to Python native types for JSON serialization."""
@@ -40,6 +42,7 @@ def convert_result_to_text(result):
 
 def validate_image_file(file: UploadFile) -> None:
     """Validate that the uploaded file is an image."""
+
     # Allowed image extensions
     allowed_extensions = {
         ".jpg",
@@ -67,6 +70,9 @@ def validate_image_file(file: UploadFile) -> None:
     if file.filename:
         file_extension = Path(file.filename).suffix.lower()
         if file_extension not in allowed_extensions:
+            logger.warning(
+                f"Invalid file extension: {file_extension} for file: {file.filename}"
+            )
             raise HTTPException(
                 status_code=400,
                 detail="Invalid file type.",
@@ -74,6 +80,9 @@ def validate_image_file(file: UploadFile) -> None:
 
     # Check MIME type
     if file.content_type and file.content_type not in allowed_mime_types:
+        logger.warning(
+            f"Invalid MIME type: {file.content_type} for file: {file.filename}"
+        )
         raise HTTPException(
             status_code=400,
             detail=f"Invalid MIME type. Expected image file, got: {file.content_type}",

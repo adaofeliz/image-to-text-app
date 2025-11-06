@@ -94,3 +94,8 @@ output/
 *.gif
 *.bmp
 !app/templates/*.html
+
+# Logs
+logs/
+*.log
+*.log.*

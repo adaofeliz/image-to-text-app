@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 
+from app.utils.logger import logger
+
 load_dotenv()
 
 # PostgreSQL connection settings
@@ -32,7 +34,8 @@ async def get_db() -> AsyncSession:
         try:
             yield session
             await session.commit()
-        except Exception:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.error("Database session error: %s", exc, exc_info=True)
             await session.rollback()
             raise
         finally:
@@ -44,12 +47,20 @@ async def check_connection() -> bool:
     try:
         async with engine.begin() as conn:
             await conn.execute("SELECT 1")
+        logger.debug("Database connection check successful")
         return True
-    except Exception:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error("Database connection check failed: %s", exc, exc_info=True)
         return False
 
 
 async def init_db():
     """Initialize database tables."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        logger.info("Initializing database tables...")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables initialized successfully")
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error("Failed to initialize database tables: %s", exc, exc_info=True)
+        raise
