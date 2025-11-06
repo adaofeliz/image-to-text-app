@@ -13,6 +13,48 @@ else
     COMPOSE_FILE="docker-compose.yml"
 fi
 
+# Pull latest changes from main branch
+# Git is required for deployment
+if ! command -v git &> /dev/null; then
+    echo "❌ Error: Git is not installed!"
+    echo "Please install Git to enable deployment."
+    exit 1
+fi
+
+# Check if we're in a git repository
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    echo "❌ Error: Not a git repository!"
+    echo "Deployment requires a git repository."
+    exit 1
+fi
+
+echo "📥 Pulling latest changes from main branch..."
+
+# Fetch latest changes from origin
+if ! git fetch origin; then
+    echo "❌ Error: Failed to fetch from origin"
+    exit 1
+fi
+
+# Check if we're on main branch, if not switch to it
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+if [ "$current_branch" != "main" ]; then
+    echo "🔄 Switching to main branch (currently on $current_branch)..."
+    if ! git checkout main; then
+        echo "❌ Error: Failed to checkout main branch"
+        exit 1
+    fi
+fi
+
+# Pull latest changes - this must succeed or deployment fails
+if ! git pull origin main; then
+    echo "❌ Error: Failed to pull latest changes from main branch"
+    echo "Please resolve any merge conflicts or check your network connection"
+    exit 1
+fi
+
+echo "✅ Latest code pulled successfully"
+
 # Check if .env file exists
 if [ ! -f .env ]; then
     echo "❌ Error: .env file not found!"

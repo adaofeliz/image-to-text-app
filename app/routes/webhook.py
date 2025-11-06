@@ -72,15 +72,25 @@ async def deploy_webhook(  # pylint: disable=unused-argument
         output = stdout.decode("utf-8") if stdout else ""
         return_code = process.returncode
 
+        # Check if script execution failed
+        if return_code is None:
+            logger.error("Deployment script process did not complete")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Deployment script did not complete",
+            )
+
         if return_code != 0:
             logger.error(
                 "Deployment script failed with return code %d. Output: %s",
                 return_code,
                 output,
             )
+            # Include full output in logs, but limit response detail
+            error_detail = output[-1000:] if len(output) > 1000 else output
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Deployment failed: {output[-500:]}",  # Last 500 chars
+                detail=f"Deployment failed (exit code {return_code}): {error_detail}",
             )
 
         logger.info("Deployment completed successfully")
