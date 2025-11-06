@@ -47,14 +47,45 @@ else
     exit 1
 fi
 
-# Stop existing containers
-echo "🛑 Stopping existing containers..."
-$DOCKER_COMPOSE -f $COMPOSE_FILE down --remove-orphans 2>/dev/null || true
+# Stop existing containers and clean up all resources
+echo "🛑 Stopping existing containers and cleaning up resources..."
+$DOCKER_COMPOSE -f $COMPOSE_FILE down --remove-orphans --volumes 2>/dev/null || true
 
-# Force remove any conflicting containers
-echo "🧹 Cleaning up any conflicting containers..."
-$DOCKER_CMD rm -f postgres 2>/dev/null || true
-$DOCKER_CMD rm -f web 2>/dev/null || true
+# Force remove any conflicting containers by name pattern (Ubuntu/Linux compatible)
+echo "🧹 Force removing any conflicting containers..."
+$DOCKER_CMD ps -a --filter "name=postgres" --format "{{.Names}}" 2>/dev/null | while read -r container; do
+    [ -n "$container" ] && $DOCKER_CMD rm -f "$container" 2>/dev/null || true
+done || true
+
+$DOCKER_CMD ps -a --filter "name=web" --format "{{.Names}}" 2>/dev/null | while read -r container; do
+    [ -n "$container" ] && $DOCKER_CMD rm -f "$container" 2>/dev/null || true
+done || true
+
+$DOCKER_CMD ps -a --filter "name=project-" --format "{{.Names}}" 2>/dev/null | while read -r container; do
+    [ -n "$container" ] && $DOCKER_CMD rm -f "$container" 2>/dev/null || true
+done || true
+
+# Stop any containers using port 8000 (Ubuntu/Linux compatible)
+echo "🔌 Checking for containers using port 8000..."
+$DOCKER_CMD ps --filter "publish=8000" --format "{{.ID}}" 2>/dev/null | while read -r container; do
+    if [ -n "$container" ]; then
+        echo "⚠️  Found container $container using port 8000, stopping it..."
+        $DOCKER_CMD stop "$container" 2>/dev/null || true
+        $DOCKER_CMD rm -f "$container" 2>/dev/null || true
+    fi
+done || true
+
+# Also check stopped containers using port 8000
+$DOCKER_CMD ps -a --filter "publish=8000" --format "{{.ID}}" 2>/dev/null | while read -r container; do
+    [ -n "$container" ] && $DOCKER_CMD rm -f "$container" 2>/dev/null || true
+done || true
+
+# Remove any orphaned networks
+echo "🌐 Cleaning up orphaned networks..."
+$DOCKER_CMD network prune -f 2>/dev/null || true
+
+# Wait a moment for cleanup to complete
+sleep 2
 
 # Build and start services
 echo "🔨 Building and starting services..."
