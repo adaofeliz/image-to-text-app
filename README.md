@@ -13,6 +13,7 @@ A FastAPI-based REST API service that converts images to text using OCR (Optical
 - 📚 **Interactive API Docs**: Swagger UI documentation at `/docs`
 - ✅ **Health Check**: Monitor API server status at `/health`
 - 🎨 **Custom Error Pages**: Beautiful 404 error page for invalid routes
+- 🚀 **Deployment Webhook**: Automated deployment via webhook endpoint
 
 ## Tech Stack
 
@@ -101,19 +102,19 @@ Login and receive access and refresh tokens.
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer"
+  "token_type": "bearer",
+  "name": "John Doe",
+  "user_id": "user-uuid-here"
 }
 ```
 
-#### POST `/auth/verify-email`
+#### GET `/auth/verify-email`
 
 Verify user email with verification token.
 
 **Request**:
-```json
-{
-  "token": "verification-token-from-email"
-}
+```
+GET /auth/verify-email?token=verification-token-from-email
 ```
 
 **Response**:
@@ -139,7 +140,9 @@ Refresh access token using refresh token. **Protected route** - requires valid r
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer"
+  "token_type": "bearer",
+  "name": "John Doe",
+  "user_id": "user-uuid-here"
 }
 ```
 
@@ -207,6 +210,37 @@ Check if the API server is running.
 
 Interactive API documentation (Swagger UI).
 
+### Webhook Endpoints
+
+#### GET `/webhook/deploy`
+
+Trigger deployment via webhook. Executes the `deploy.sh` script in the production environment.
+
+**Security**: Requires a valid deployment token via query parameter.
+
+**Request**:
+```
+GET /webhook/deploy?token=your-deployment-token&environment=production
+```
+
+**Query Parameters**:
+- `token` (required): Deployment webhook token (must match `DEPLOY_WEBHOOK_TOKEN` environment variable)
+- `environment` (optional): Deployment environment (defaults to "production")
+
+**Response**:
+```json
+{
+  "message": "Deployment triggered successfully",
+  "environment": "production",
+  "output": "deployment script output..."
+}
+```
+
+**Environment Variable**:
+```env
+DEPLOY_WEBHOOK_TOKEN=your-secret-token-here
+```
+
 ## Project Structure
 
 ```
@@ -232,12 +266,17 @@ image-to-text-app/
 │   │   ├── __init__.py      # Router initialization
 │   │   ├── health.py        # Health check endpoint
 │   │   ├── auth.py          # Authentication endpoints
-│   │   └── image_to_text.py # Image to text conversion endpoint
+│   │   ├── image_to_text.py # Image to text conversion endpoint
+│   │   └── webhook.py       # Deployment webhook endpoint
 │   └── templates/
 │       └── NotFound.html    # 404 error page
 ├── Dockerfile               # Docker image configuration
-├── docker-compose.yml       # Docker Compose configuration (includes PostgreSQL)
+├── docker-compose.yml       # Docker Compose configuration (development)
+├── docker-compose.prod.yml  # Docker Compose configuration (production)
+├── deploy.sh                # Deployment script
 ├── requirements.txt         # Python dependencies
+├── pytest.ini              # Pytest configuration
+├── .pylintrc               # Pylint configuration
 ├── .gitignore              # Git ignore rules
 └── README.md               # This file
 ```
@@ -294,6 +333,44 @@ See `requirements.txt` for the complete list.
 - `/convert/image/text` - Requires valid access token and verified email
 - `/auth/refresh` - Requires valid refresh token
 - `/auth/logout` - Requires valid access token
+
+### Webhook Routes
+- `/webhook/deploy` - Requires valid deployment token (set `DEPLOY_WEBHOOK_TOKEN` environment variable)
+
+## Testing
+
+The project includes comprehensive tests using `pytest` and `pytest-asyncio` for async testing.
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=app --cov-report=html
+
+# Run specific test file
+pytest tests/test_auth.py
+
+# Run with verbose output
+pytest -v
+```
+
+### Test Structure
+
+- `tests/conftest.py` - Pytest fixtures and configuration
+- `tests/test_auth.py` - Authentication route tests
+- `tests/test_image_to_text.py` - Image conversion route tests
+
+### Test Coverage
+
+Tests cover:
+- User registration and authentication
+- Token refresh and logout
+- Protected route access
+- Image-to-text conversion
+- Error handling
 
 ## Contributing
 
