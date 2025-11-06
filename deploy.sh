@@ -4,6 +4,9 @@ set -e  # Exit on error
 
 ENVIRONMENT=${1:-production}
 
+echo "⏳ Waiting 10 seconds before starting deployment..."
+sleep 10
+
 echo "🚀 Starting deployment in $ENVIRONMENT mode..."
 
 # Determine which compose file to use
