@@ -47,15 +47,9 @@ else
     exit 1
 fi
 
-# Only clean up containers that might conflict with port 8000
-echo "🔌 Checking for containers using port 8000..."
-$DOCKER_CMD ps --filter "publish=8000" --format "{{.ID}}" 2>/dev/null | while read -r container; do
-    if [ -n "$container" ]; then
-        echo "⚠️  Found container $container using port 8000, stopping it..."
-        $DOCKER_CMD stop "$container" 2>/dev/null || true
-        $DOCKER_CMD rm -f "$container" 2>/dev/null || true
-    fi
-done || true
+# Gracefully stop existing services managed by this compose file
+echo "🛑 Gracefully stopping existing services..."
+$DOCKER_COMPOSE -f $COMPOSE_FILE down 2>/dev/null || true
 
 # Build and recreate services with latest code
 echo "🔨 Building and starting services with latest code..."
