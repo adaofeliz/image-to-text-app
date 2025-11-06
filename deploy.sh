@@ -95,7 +95,12 @@ fi
 
 # Stop existing containers
 echo "🛑 Stopping existing containers..."
-$DOCKER_COMPOSE -f $COMPOSE_FILE down 2>/dev/null || true
+$DOCKER_COMPOSE -f $COMPOSE_FILE down --remove-orphans 2>/dev/null || true
+
+# Force remove any conflicting containers
+echo "🧹 Cleaning up any conflicting containers..."
+$DOCKER_CMD rm -f postgres 2>/dev/null || true
+$DOCKER_CMD rm -f web 2>/dev/null || true
 
 # Build and start services
 echo "🔨 Building and starting services..."
