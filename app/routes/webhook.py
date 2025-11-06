@@ -44,20 +44,44 @@ async def deploy_webhook(  # pylint: disable=unused-argument
         logger.info("Deployment webhook triggered for environment: %s", environment)
 
         # Get the project root directory
+        # Path from webhook.py: app/routes/webhook.py -> app -> project root
         project_root = Path(__file__).parent.parent.parent.resolve()
-        deploy_script = project_root / "deploy.sh"
 
-        if not deploy_script.exists():
-            logger.error("deploy.sh script not found at: %s", deploy_script)
+        # Try multiple possible locations for deploy.sh
+        # Priority: mounted volume path, then project root, then current directory
+        possible_paths = [
+            Path("/app/deploy.sh"),  # If running in Docker with mounted volume
+            project_root / "deploy.sh",  # Standard location (relative to webhook.py)
+            Path.cwd() / "deploy.sh",  # Current working directory
+        ]
+
+        deploy_script = None
+        checked_paths = []
+        for path in possible_paths:
+            checked_paths.append(str(path))
+            try:
+                resolved_path = path.resolve()
+                if resolved_path.exists() and resolved_path.is_file():
+                    deploy_script = resolved_path
+                    logger.info("Found deploy.sh at: %s", deploy_script)
+                    break
+            except (OSError, RuntimeError) as e:
+                logger.debug("Could not resolve path %s: %s", path, e)
+                continue
+
+        if not deploy_script:
+            error_msg = (
+                f"Deployment script not found. Checked paths: {', '.join(checked_paths)}. "
+                "Ensure deploy.sh is mounted as a volume or available in the project root."
+            )
+            logger.error(error_msg)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Deployment script not found",
+                detail=error_msg,
             )
 
-        # Make sure script is executable
-        deploy_script.chmod(0o755)
-
         # Execute deployment script asynchronously
+        # Note: Script must be executable on the host since it's mounted read-only
         logger.info("Executing deployment script: %s", deploy_script)
         process = await asyncio.create_subprocess_exec(
             str(deploy_script),

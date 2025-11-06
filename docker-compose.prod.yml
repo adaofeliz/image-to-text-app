@@ -25,6 +25,9 @@ services:
       - .env
     volumes:
       - ./logs:/app/logs
+      - ./deploy.sh:/app/deploy.sh:ro
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
+      - ./docker-compose.prod.yml:/app/docker-compose.prod.yml:ro
     restart: unless-stopped
     depends_on:
       postgres:
