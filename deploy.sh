@@ -70,16 +70,23 @@ if [ ! -f .env ]; then
 fi
 
 # Check if Docker is installed
-if ! command -v docker &> /dev/null; then
+if ! command -v docker &> /dev/null && [ ! -f /usr/bin/docker ]; then
     echo "❌ Error: Docker is not installed!"
     exit 1
+fi
+
+# Set docker command (use full path if command -v didn't work)
+if command -v docker &> /dev/null; then
+    DOCKER_CMD="docker"
+else
+    DOCKER_CMD="/usr/bin/docker"
 fi
 
 # Check if Docker Compose is installed (support both docker-compose and docker compose)
 if command -v docker-compose &> /dev/null; then
     DOCKER_COMPOSE="docker-compose"
-elif docker compose version &> /dev/null; then
-    DOCKER_COMPOSE="docker compose"
+elif $DOCKER_CMD compose version &> /dev/null 2>&1; then
+    DOCKER_COMPOSE="$DOCKER_CMD compose"
 else
     echo "❌ Error: Docker Compose is not installed!"
     echo "Please install Docker Compose (either 'docker-compose' or 'docker compose' plugin)"

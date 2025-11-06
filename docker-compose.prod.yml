@@ -30,6 +30,7 @@ services:
       - ./docker-compose.prod.yml:/app/docker-compose.prod.yml:ro
       - ./.git:/app/.git
       - ./.env:/app/.env:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     depends_on:
       postgres:
