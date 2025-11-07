@@ -1,33 +1,15 @@
 """Webhook routes for deployment and automation."""
 
 import asyncio
-import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
+from app.dependencies.dependencies import verify_deploy_token
 from app.utils.logger import logger
 
 router = APIRouter()
-
-
-def verify_deploy_token(token: str = Query(..., description="Deployment token")):
-    """Verify deployment webhook token."""
-    expected_token = os.getenv("DEPLOY_WEBHOOK_TOKEN")
-    if not expected_token:
-        logger.warning("DEPLOY_WEBHOOK_TOKEN not set in environment")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Deployment webhook is not configured",
-        )
-    if token != expected_token:
-        logger.warning("Invalid deployment token attempted")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid deployment token",
-        )
-    return token
 
 
 @router.post("/webhook/deploy", status_code=status.HTTP_200_OK)
@@ -116,10 +98,6 @@ async def deploy_webhook(  # pylint: disable=unused-argument
             )
 
         logger.info("Image build completed successfully")
-        logger.info(
-            "Build completed. Please run './restart-web-app.sh %s' manually to restart the web container.",
-            environment,
-        )
 
         # Return success response
         return JSONResponse(
@@ -128,7 +106,6 @@ async def deploy_webhook(  # pylint: disable=unused-argument
                 "message": "Build completed successfully",
                 "environment": environment,
                 "status": "completed",
-                "next_step": f"Run './restart-web-app.sh {environment}' from the host to restart the web container",
             },
         )
     except HTTPException:
@@ -203,8 +180,7 @@ async def git_pull_webhook(  # pylint: disable=unused-argument
         # Output will be captured by Docker logs since we're running in a container
         process = await asyncio.create_subprocess_exec(
             str(pull_script),
-            stdout=None,  # Inherit stdout (goes to container logs)
-            stderr=None,  # Inherit stderr (goes to container logs)
+            stdout=None,
             cwd=str(script_working_dir),
         )
 

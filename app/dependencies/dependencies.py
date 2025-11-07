@@ -1,8 +1,9 @@
-"""FastAPI dependencies for authentication."""
+"""FastAPI dependencies for authentication and webhooks."""
 
+import os
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +13,24 @@ from app.utils.logger import logger
 from app.database import TokenBlacklist, User, get_db
 
 security = HTTPBearer()
+
+
+def verify_deploy_token(token: str = Query(..., description="Deployment token")):
+    """Verify deployment webhook token."""
+    expected_token = os.getenv("DEPLOY_WEBHOOK_TOKEN")
+    if not expected_token:
+        logger.warning("DEPLOY_WEBHOOK_TOKEN not set in environment")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Deployment webhook is not configured",
+        )
+    if token != expected_token:
+        logger.warning("Invalid deployment token attempted")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid deployment token",
+        )
+    return token
 
 
 async def get_current_user(
