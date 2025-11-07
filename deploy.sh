@@ -29,14 +29,14 @@ if ! command -v docker &> /dev/null && [ ! -f /usr/bin/docker ]; then
     exit 1
 fi
 
-# Set docker command (use full path if command -v didn't work)
+# Set docker command
 if command -v docker &> /dev/null; then
     DOCKER_CMD="docker"
 else
     DOCKER_CMD="/usr/bin/docker"
 fi
 
-# Check if Docker Compose is installed (support both docker-compose and docker compose)
+# Check if Docker Compose is installed
 if command -v docker-compose &> /dev/null; then
     DOCKER_COMPOSE="docker-compose"
 elif $DOCKER_CMD compose version &> /dev/null 2>&1; then
@@ -47,32 +47,68 @@ else
     exit 1
 fi
 
-# Gracefully stop existing services managed by this compose file
-echo "🛑 Gracefully stopping existing services..."
-$DOCKER_COMPOSE -f $COMPOSE_FILE down 2>/dev/null || true
+# Ensure postgres and watchtower are running
+echo "🔍 Ensuring postgres and watchtower services are running..."
+$DOCKER_COMPOSE -f $COMPOSE_FILE up -d postgres watchtower
 
-# Build and recreate services with latest code
-echo "🔨 Building and starting services with latest code..."
-$DOCKER_COMPOSE -f $COMPOSE_FILE up -d --build --force-recreate
-echo "✅ $ENVIRONMENT deployment complete!"
+# Wait for postgres to be healthy
+echo "⏳ Checking postgres health..."
+if ! $DOCKER_CMD exec postgres pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres} > /dev/null 2>&1; then
+    echo "⏳ Waiting for postgres to become healthy..."
+    timeout=60
+    elapsed=0
+    while ! $DOCKER_CMD exec postgres pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres} > /dev/null 2>&1; do
+        if [ $elapsed -ge $timeout ]; then
+            echo "❌ Error: Postgres failed to become healthy within ${timeout} seconds"
+            exit 1
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+        echo "   Waiting for postgres... (${elapsed}/${timeout}s)"
+    done
+fi
+echo "✅ Postgres is healthy"
+
+# Build only the web service image
+echo "🔨 Building FastAPI application image..."
+$DOCKER_COMPOSE -f $COMPOSE_FILE build web
+
+echo "✅ Image built successfully!"
+echo "🔄 Watchtower will automatically detect the new image and update the web container"
+echo "   (This typically happens within 30 seconds due to Watchtower's polling interval)"
+
+# Wait a moment for watchtower to detect and update
+echo "⏳ Waiting for Watchtower to update the container (up to 35 seconds)..."
+sleep 35
+
 echo "📊 Checking service status..."
 $DOCKER_COMPOSE -f $COMPOSE_FILE ps
-
-# Wait a moment for services to start
-sleep 5
 
 # Check health (only if curl is available)
 echo "🏥 Checking service health..."
 if command -v curl &> /dev/null; then
-    if curl -f http://localhost:8000/health > /dev/null 2>&1; then
-        echo "✅ API is healthy and running!"
-        echo "🌐 API available at: http://localhost:8000"
-    else
-        echo "⚠️  Warning: Health check failed. Check logs with:"
-        echo "   $DOCKER_COMPOSE -f $COMPOSE_FILE logs"
-    fi
+    max_attempts=6
+    attempt=1
+    while [ $attempt -le $max_attempts ]; do
+        if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+            echo "✅ API is healthy and running!"
+            echo "🌐 API available at: http://localhost:8000"
+            exit 0
+        else
+            if [ $attempt -lt $max_attempts ]; then
+                echo "   Health check attempt $attempt/$max_attempts failed, retrying in 5 seconds..."
+                sleep 5
+            fi
+            attempt=$((attempt + 1))
+        fi
+    done
+    echo "⚠️  Warning: Health check failed after $max_attempts attempts."
+    echo "   The container may still be updating. Check status with:"
+    echo "   $DOCKER_COMPOSE -f $COMPOSE_FILE ps"
+    echo "   $DOCKER_COMPOSE -f $COMPOSE_FILE logs web"
+    echo "   $DOCKER_CMD logs watchtower"
 else
     echo "ℹ️  curl not available, skipping health check"
     echo "   Check service status with: $DOCKER_COMPOSE -f $COMPOSE_FILE ps"
-    echo "   View logs with: $DOCKER_COMPOSE -f $COMPOSE_FILE logs"
+    echo "   View logs with: $DOCKER_COMPOSE -f $COMPOSE_FILE logs web"
 fi

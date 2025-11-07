@@ -19,6 +19,8 @@ services:
 
   web:
     build: .
+    image: image-to-text-app:latest
+    container_name: image-to-text-app-web
     ports:
       - "8000:8000"
     env_file:
@@ -33,6 +35,22 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_INCLUDE_STOPPED=false
+      - WATCHTOWER_REVIVE_STOPPED=false
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_ROLLING_RESTART=true
+    command: --interval 30 --label-enable
 
 volumes:
   postgres_data:
