@@ -19,6 +19,6 @@ def health_check():
         status_code=200,
         content={
             "status": "ok",
-            "message": f"{os.getenv('ENVIRONMENT', 'API').capitalize()} API server is up and running!!!! 🚀",
+            "message": f"{os.getenv('ENVIRONMENT', 'API').capitalize()} API server is up and running!!!! 🚀🚀🚀🚀",
         },
     )
