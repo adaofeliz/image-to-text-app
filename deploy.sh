@@ -47,9 +47,29 @@ else
     exit 1
 fi
 
-# Ensure postgres and watchtower are running
-echo "🔍 Ensuring postgres and watchtower services are running..."
-$DOCKER_COMPOSE -f $COMPOSE_FILE up -d postgres watchtower
+# Check if postgres container exists and is running
+echo "🔍 Checking postgres container status..."
+if $DOCKER_CMD ps --filter "name=postgres" --format "{{.Names}}" | grep -q "^postgres$"; then
+    echo "✅ Postgres container is running"
+elif $DOCKER_CMD ps -a --filter "name=postgres" --format "{{.Names}}" | grep -q "^postgres$"; then
+    echo "🔄 Starting existing postgres container..."
+    $DOCKER_CMD start postgres
+else
+    echo "📦 Creating postgres container..."
+    $DOCKER_COMPOSE -f $COMPOSE_FILE up -d postgres
+fi
+
+# Check if watchtower container exists and is running
+echo "🔍 Checking watchtower container status..."
+if $DOCKER_CMD ps --filter "name=watchtower" --format "{{.Names}}" | grep -q "^watchtower$"; then
+    echo "✅ Watchtower container is running"
+elif $DOCKER_CMD ps -a --filter "name=watchtower" --format "{{.Names}}" | grep -q "^watchtower$"; then
+    echo "🔄 Starting existing watchtower container..."
+    $DOCKER_CMD start watchtower
+else
+    echo "📦 Creating watchtower container..."
+    $DOCKER_COMPOSE -f $COMPOSE_FILE up -d watchtower
+fi
 
 # Wait for postgres to be healthy
 echo "⏳ Checking postgres health..."
