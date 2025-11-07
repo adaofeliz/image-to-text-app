@@ -4,10 +4,10 @@ set -e  # Exit on error
 
 ENVIRONMENT=${1:-production}
 
-echo "⏳ Waiting 10 seconds before starting deployment..."
+echo "⏳ Waiting 10 seconds before starting build..."
 sleep 10
 
-echo "🚀 Starting deployment in $ENVIRONMENT mode..."
+echo "🚀 Building web application image in $ENVIRONMENT mode..."
 
 # Determine which compose file to use
 if [ "$ENVIRONMENT" = "production" ]; then
@@ -47,7 +47,7 @@ else
     exit 1
 fi
 
-# Check if postgres container exists and is running
+# Check if postgres container exists and is running (needed for build dependencies)
 echo "🔍 Checking postgres container status..."
 if $DOCKER_CMD ps --filter "name=postgres" --format "{{.Names}}" | grep -q "^postgres$"; then
     echo "✅ Postgres container is running"
@@ -57,18 +57,6 @@ elif $DOCKER_CMD ps -a --filter "name=postgres" --format "{{.Names}}" | grep -q 
 else
     echo "📦 Creating postgres container..."
     $DOCKER_COMPOSE -f $COMPOSE_FILE up -d postgres
-fi
-
-# Check if watchtower container exists and is running
-echo "🔍 Checking watchtower container status..."
-if $DOCKER_CMD ps --filter "name=watchtower" --format "{{.Names}}" | grep -q "^watchtower$"; then
-    echo "✅ Watchtower container is running"
-elif $DOCKER_CMD ps -a --filter "name=watchtower" --format "{{.Names}}" | grep -q "^watchtower$"; then
-    echo "🔄 Starting existing watchtower container..."
-    $DOCKER_CMD start watchtower
-else
-    echo "📦 Creating watchtower container..."
-    $DOCKER_COMPOSE -f $COMPOSE_FILE up -d watchtower
 fi
 
 # Wait for postgres to be healthy
@@ -94,41 +82,3 @@ echo "🔨 Building FastAPI application image..."
 $DOCKER_COMPOSE -f $COMPOSE_FILE build web
 
 echo "✅ Image built successfully!"
-echo "🔄 Watchtower will automatically detect the new image and update the web container"
-echo "   (This typically happens within 30 seconds due to Watchtower's polling interval)"
-
-# Wait a moment for watchtower to detect and update
-echo "⏳ Waiting for Watchtower to update the container (up to 35 seconds)..."
-sleep 35
-
-echo "📊 Checking service status..."
-$DOCKER_COMPOSE -f $COMPOSE_FILE ps
-
-# Check health (only if curl is available)
-echo "🏥 Checking service health..."
-if command -v curl &> /dev/null; then
-    max_attempts=6
-    attempt=1
-    while [ $attempt -le $max_attempts ]; do
-        if curl -f http://localhost:8000/health > /dev/null 2>&1; then
-            echo "✅ API is healthy and running!"
-            echo "🌐 API available at: http://localhost:8000"
-            exit 0
-        else
-            if [ $attempt -lt $max_attempts ]; then
-                echo "   Health check attempt $attempt/$max_attempts failed, retrying in 5 seconds..."
-                sleep 5
-            fi
-            attempt=$((attempt + 1))
-        fi
-    done
-    echo "⚠️  Warning: Health check failed after $max_attempts attempts."
-    echo "   The container may still be updating. Check status with:"
-    echo "   $DOCKER_COMPOSE -f $COMPOSE_FILE ps"
-    echo "   $DOCKER_COMPOSE -f $COMPOSE_FILE logs web"
-    echo "   $DOCKER_CMD logs watchtower"
-else
-    echo "ℹ️  curl not available, skipping health check"
-    echo "   Check service status with: $DOCKER_COMPOSE -f $COMPOSE_FILE ps"
-    echo "   View logs with: $DOCKER_COMPOSE -f $COMPOSE_FILE logs web"
-fi

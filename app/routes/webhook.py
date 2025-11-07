@@ -35,9 +35,9 @@ async def deploy_webhook(  # pylint: disable=unused-argument
     environment: str = Query("production", description="Deployment environment"),
     _token: str = Depends(verify_deploy_token),
 ):
-    """Trigger deployment via webhook.
+    """Trigger build via webhook.
 
-    This endpoint executes the deploy.sh script in the production environment.
+    This endpoint executes the build_web-app.sh script to build the web application image.
     Requires a valid deployment token via query parameter.
     """
     try:
@@ -46,32 +46,35 @@ async def deploy_webhook(  # pylint: disable=unused-argument
         # Get the project root directory
         project_root = Path(__file__).parent.parent.parent.resolve()
 
-        # Try multiple possible locations for deploy.sh
+        # Try multiple possible locations for build_web-app.sh
         # Priority: mounted volume path, then project root, then current directory
         possible_paths = [
-            Path("/app/project/deploy.sh"),  # If running in Docker with mounted volume
-            project_root / "deploy.sh",  # Standard location (relative to webhook.py)
-            Path.cwd() / "deploy.sh",  # Current working directory
+            Path(
+                "/app/project/build_web-app.sh"
+            ),  # If running in Docker with mounted volume
+            project_root
+            / "build_web-app.sh",  # Standard location (relative to webhook.py)
+            Path.cwd() / "build_web-app.sh",  # Current working directory
         ]
 
-        deploy_script = None
+        build_script = None
         checked_paths = []
         for path in possible_paths:
             checked_paths.append(str(path))
             try:
                 resolved_path = path.resolve()
                 if resolved_path.exists() and resolved_path.is_file():
-                    deploy_script = resolved_path
-                    logger.info("Found deploy.sh at: %s", deploy_script)
+                    build_script = resolved_path
+                    logger.info("Found build_web-app.sh at: %s", build_script)
                     break
             except (OSError, RuntimeError) as e:
                 logger.debug("Could not resolve path %s: %s", path, e)
                 continue
 
-        if not deploy_script:
+        if not build_script:
             error_msg = (
-                f"Deployment script not found. Checked paths: {', '.join(checked_paths)}. "
-                "Ensure deploy.sh is mounted as a volume or available in the project root."
+                f"Build script not found. Checked paths: {', '.join(checked_paths)}. "
+                "Ensure build_web-app.sh is mounted as a volume or available in the project root."
             )
             logger.error(error_msg)
             raise HTTPException(
@@ -79,37 +82,53 @@ async def deploy_webhook(  # pylint: disable=unused-argument
                 detail=error_msg,
             )
 
-        # Execute deployment script asynchronously in the background
+        # Execute build script asynchronously in the background
         script_working_dir = (
             Path("/app/project")
-            if str(deploy_script).startswith("/app/project")
+            if str(build_script).startswith("/app/project")
             else str(project_root)
         )
         logger.info(
-            "Starting deployment script in background: %s (cwd: %s)",
-            deploy_script,
+            "Starting build script in background: %s (cwd: %s)",
+            build_script,
             script_working_dir,
         )
 
-        # Output will be captured by Docker logs since we're running in a container
+        # Execute build script and wait for it to complete
+        logger.info("Executing build script (this will build the image)...")
         process = await asyncio.create_subprocess_exec(
-            str(deploy_script),
+            str(build_script),
             environment,
-            stdout=None,  # Inherit stdout (goes to container logs)
-            stderr=None,  # Inherit stderr (goes to container logs)
+            stdout=None,
+            stderr=None,
             cwd=str(script_working_dir),
         )
 
-        logger.info("Deployment script started with PID: %s", process.pid)
+        # Wait for build script to complete
+        await process.wait()
 
-        # Return success response immediately without waiting for completion
+        if process.returncode != 0:
+            error_msg = f"Build failed (exit code {process.returncode})"
+            logger.error(error_msg)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=error_msg,
+            )
+
+        logger.info("Image build completed successfully")
+        logger.info(
+            "Build completed. Please run './restart-web-app.sh %s' manually to restart the web container.",
+            environment,
+        )
+
+        # Return success response
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={
-                "message": "Deployment triggered successfully",
+                "message": "Build completed successfully",
                 "environment": environment,
-                "status": "started",
-                "pid": process.pid,
+                "status": "completed",
+                "next_step": f"Run './restart-web-app.sh {environment}' from the host to restart the web container",
             },
         )
     except HTTPException:
