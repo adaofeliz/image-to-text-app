@@ -2,8 +2,6 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: postgres
-    ports:
-      - "0.0.0.0:5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -19,16 +17,14 @@ services:
 
   web:
     build: .
-    image: image-to-text-app:latest
     container_name: image-to-text-app-web
     ports:
-      - "8000"
+      - "127.0.0.1:8000:8000"
     env_file:
       - .env
     volumes:
       - ./logs:/app/logs
       - .:/app/project
-      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     depends_on:
       postgres:
@@ -37,4 +33,3 @@ services:
 
 volumes:
   postgres_data:
-
