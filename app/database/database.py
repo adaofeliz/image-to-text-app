@@ -2,7 +2,10 @@
 
 import os
 
+from collections.abc import AsyncGenerator
+
 from dotenv import load_dotenv
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 
@@ -28,7 +31,7 @@ AsyncSessionLocal = async_sessionmaker(
 Base = declarative_base()
 
 
-async def get_db() -> AsyncSession:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Get database session."""
     async with AsyncSessionLocal() as session:
         try:
@@ -46,7 +49,7 @@ async def check_connection() -> bool:
     """Check PostgreSQL connection."""
     try:
         async with engine.begin() as conn:
-            await conn.execute("SELECT 1")
+            await conn.execute(text("SELECT 1"))
         logger.debug("Database connection check successful")
         return True
     except Exception as exc:  # pylint: disable=broad-exception-caught
