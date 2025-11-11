@@ -19,7 +19,7 @@ from app.utils.logger import logger
 load_dotenv()
 
 
-APP_HOST = os.getenv("APP_HOST", "127.0.0.1")
+APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
 APP_PORT = int(os.getenv("APP_PORT", "8000"))
 DEBUG = os.getenv("APP_DEBUG", "False")
 
