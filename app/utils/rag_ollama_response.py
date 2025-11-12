@@ -18,7 +18,7 @@ async def get_rag_ollama_response(query: str, relevant_context: str) -> str:
 
     def _generate():
         response = client.generate(
-            model="llama3.1:4b",
+            model="llama3.2:latest",
             prompt=prompt,
             stream=False,
             options={
