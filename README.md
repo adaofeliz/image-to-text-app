@@ -1,10 +1,11 @@
-# Image to Text API
+# ScanGenAI API
 
 A FastAPI-based REST API service that converts images to text using OCR (Optical Character Recognition) powered by PaddleOCR.
 
 ## Features
 
 - 🖼️ **Image to Text Conversion**: Upload images and extract text using advanced OCR
+- 📄 **RAG with PDF**: Upload PDFs and query them using Retrieval-Augmented Generation with vector search
 - 🔐 **Authentication System**: JWT-based authentication with PostgreSQL
 - 👤 **User Management**: Register, login, email verification, and token refresh
 - 🔒 **Protected Routes**: Secure endpoints with token-based authentication
@@ -14,13 +15,16 @@ A FastAPI-based REST API service that converts images to text using OCR (Optical
 - ✅ **Health Check**: Monitor API server status at `/health`
 - 🎨 **Custom Error Pages**: Beautiful 404 error page for invalid routes
 - 🚀 **Deployment Webhook**: Automated deployment via webhook endpoint
+- 🔍 **Vector Search**: Qdrant vector database for semantic search and RAG
 
 ## Tech Stack
 
 - **Framework**: FastAPI
 - **Database**: PostgreSQL (with SQLAlchemy ORM)
+- **Vector Database**: Qdrant
 - **Authentication**: JWT (PyJWT), bcrypt for password hashing
 - **OCR Engine**: PaddleOCR
+- **RAG Framework**: LangChain (with OpenAI embeddings)
 - **ML Framework**: PyTorch
 - **Python Version**: 3.11
 - **Container**: Docker & Docker Compose
@@ -55,191 +59,12 @@ A FastAPI-based REST API service that converts images to text using OCR (Optical
    - API Documentation: `http://localhost:8000/docs`
    - Health Check: `http://localhost:8000/health`
    - PostgreSQL: `postgresql://localhost:5432`
+   - Qdrant Dashboard: `http://localhost:6333/dashboard`
 
 5. **Configure environment variables** (create `.env` file):
    ```env
   Make sure you update the .env.example with your own values
 
-
-## API Endpoints
-
-### Authentication Endpoints
-
-#### POST `/auth/register`
-
-Register a new user.
-
-**Request**:
-```json
-{
-  "name": "John Doe",
-  "email": "john@example.com",
-  "password": "securepassword123"
-}
-```
-
-**Response**:
-```json
-{
-  "message": "User registered successfully. Please check your email to verify your account."
-}
-```
-
-#### POST `/auth/login`
-
-Login and receive access and refresh tokens.
-
-**Request**:
-```json
-{
-  "email": "john@example.com",
-  "password": "securepassword123"
-}
-```
-
-**Response**:
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer",
-  "name": "John Doe",
-  "user_id": "user-uuid-here"
-}
-```
-
-#### GET `/auth/verify-email`
-
-Verify user email with verification token.
-
-**Request**:
-```
-GET /auth/verify-email?token=verification-token-from-email
-```
-
-**Response**:
-```json
-{
-  "message": "Email verified successfully"
-}
-```
-
-#### POST `/auth/refresh`
-
-Refresh access token using refresh token. **Protected route** - requires valid refresh token.
-
-**Request**:
-```json
-{
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-**Response**:
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer",
-  "name": "John Doe",
-  "user_id": "user-uuid-here"
-}
-```
-
-#### POST `/auth/logout`
-
-Logout user by invalidating tokens. **Protected route** - requires valid access token.
-
-**Request Headers**:
-```
-Authorization: Bearer <access_token>
-```
-
-**Request Body**:
-```json
-{
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-**Response**:
-```json
-{
-  "message": "Logged out successfully. Tokens revoked."
-}
-```
-
-### Protected Endpoints
-
-#### POST `/convert/image/text`
-
-Convert an uploaded image to text using OCR. **Protected route** - requires valid access token.
-
-**Request Headers**:
-```
-Authorization: Bearer <access_token>
-```
-
-**Request**:
-- Method: `POST`
-- Content-Type: `multipart/form-data`
-- Body: Image file (form field: `image`)
-
-**Response**:
-```json
-{
-  "message": "Extracted text from image"
-}
-```
-
-### Public Endpoints
-
-#### GET `/health`
-
-Check if the API server is running.
-
-**Response**:
-```json
-{
-  "status": "ok",
-  "message": "API server is up and running"
-}
-```
-
-#### GET `/docs`
-
-Interactive API documentation (Swagger UI).
-
-### Webhook Endpoints
-
-#### GET `/webhook/deploy`
-
-Trigger deployment via webhook. Executes the `deploy.sh` script in the production environment.
-
-**Security**: Requires a valid deployment token via query parameter.
-
-**Request**:
-```
-GET /webhook/deploy?token=your-deployment-token&environment=production
-```
-
-**Query Parameters**:
-- `token` (required): Deployment webhook token (must match `DEPLOY_WEBHOOK_TOKEN` environment variable)
-- `environment` (optional): Deployment environment (defaults to "production")
-
-**Response**:
-```json
-{
-  "message": "Deployment triggered successfully",
-  "environment": "production",
-  "output": "deployment script output..."
-}
-```
-
-**Environment Variable**:
-```env
-DEPLOY_WEBHOOK_TOKEN=your-secret-token-here
-```
 
 ## Project Structure
 
@@ -261,12 +86,14 @@ image-to-text-app/
 │   ├── utils/
 │   │   ├── __init__.py      # Utils module exports
 │   │   ├── auth_utils.py    # Authentication utilities (JWT, password hashing)
-│   │   └── utils.py         # Utility functions for image processing
+│   │   ├── utils.py         # Utility functions for image processing
+│   │   └── rag_openai_response.py  # RAG utilities for OpenAI integration
 │   ├── routes/
 │   │   ├── __init__.py      # Router initialization
 │   │   ├── health.py        # Health check endpoint
 │   │   ├── auth.py          # Authentication endpoints
 │   │   ├── image_to_text.py # Image to text conversion endpoint
+│   │   ├── rag_with_pdf.py  # RAG with PDF endpoint
 │   │   └── webhook.py       # Deployment webhook endpoint
 │   └── templates/
 │       └── NotFound.html    # 404 error page
@@ -287,10 +114,20 @@ image-to-text-app/
 
 The `docker-compose.yml` includes:
 - PostgreSQL database service with health checks
+- Qdrant vector database service with health checks
 - Volume mounting for hot-reload during development
 - Automatic file watching with `--reload` flag
 - Environment variable loading from `.env` file
-- Persistent data volumes for PostgreSQL
+- Persistent data volumes for PostgreSQL and Qdrant
+
+### Production Mode
+
+The `docker-compose.prod.yml` includes:
+- PostgreSQL database service
+- Qdrant vector database service
+- Web service without hot-reload
+- Persistent data volumes for both databases
+- Services wait for dependencies to be healthy before starting
 
 ## Error Handling
 
@@ -311,14 +148,14 @@ Key dependencies include:
 - `torch` - PyTorch for ML models
 - `uvicorn` - ASGI server
 - `pydantic` - Data validation
+- `langchain` - RAG framework
+- `langchain-openai` - OpenAI embeddings integration
+- `langchain-qdrant` - Qdrant vector store integration
+- `qdrant-client` - Qdrant Python client
 
 See `requirements.txt` for the complete list.
 
 ## Authentication
-
-### Token Expiration
-- **Access Token**: Expires after 1 hour
-- **Refresh Token**: Expires after 7 days
 
 ### Token Usage
 1. After login, you receive both `access_token` and `refresh_token`
@@ -331,6 +168,7 @@ See `requirements.txt` for the complete list.
 
 ### Protected Routes
 - `/convert/image/text` - Requires valid access token and verified email
+- `/pdf/get/response` - Requires valid access token and verified email
 - `/auth/refresh` - Requires valid refresh token
 - `/auth/logout` - Requires valid access token
 
@@ -370,6 +208,7 @@ Tests cover:
 - Token refresh and logout
 - Protected route access
 - Image-to-text conversion
+- RAG with PDF functionality
 - Error handling
 
 ## Contributing

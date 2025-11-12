@@ -94,6 +94,8 @@ async def rag_with_pdf(
 
         return ResponseItem(content=response)
 
+    except HTTPException:
+        raise
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Failed to process RAG request: %s", exc, exc_info=True)
         raise HTTPException(
