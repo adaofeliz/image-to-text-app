@@ -99,7 +99,7 @@ async def rag_with_pdf(
         if model == "openai":
             response = get_rag_openai_response(query, relevant_context)
         else:  # model == "ollama"
-            response = get_rag_ollama_response(query, relevant_context)
+            response = await get_rag_ollama_response(query, relevant_context)
 
         return ResponseItem(content=response)
 

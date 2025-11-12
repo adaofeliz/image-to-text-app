@@ -19,7 +19,7 @@ async def test_rag_with_pdf_unauthorized(client: AsyncClient):
     response = await client.post(
         "/pdf/get/response",
         files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?"},
+        data={"query": "What is this about?", "model": "openai"},
     )
     assert response.status_code == 403
 
@@ -34,7 +34,7 @@ async def test_rag_with_pdf_invalid_file_type(
     response = await client.post(
         "/pdf/get/response",
         files={"pdf": ("test.txt", text_file, "text/plain")},
-        data={"query": "What is this about?"},
+        data={"query": "What is this about?", "model": "openai"},
         headers=authenticated_user["headers"],
     )
     assert response.status_code == 400
@@ -51,7 +51,7 @@ async def test_rag_with_pdf_empty_file(client: AsyncClient, authenticated_user: 
     response = await client.post(
         "/pdf/get/response",
         files={"pdf": ("empty.pdf", empty_file, "application/pdf")},
-        data={"query": "What is this about?"},
+        data={"query": "What is this about?", "model": "openai"},
         headers=authenticated_user["headers"],
     )
     assert response.status_code == 400
@@ -65,7 +65,7 @@ async def test_rag_with_pdf_missing_file(client: AsyncClient, authenticated_user
     """Test RAG with PDF without file."""
     response = await client.post(
         "/pdf/get/response",
-        data={"query": "What is this about?"},
+        data={"query": "What is this about?", "model": "openai"},
         headers=authenticated_user["headers"],
     )
     assert response.status_code == 422
@@ -133,7 +133,7 @@ async def test_rag_with_pdf_success(
     response = await client.post(
         "/pdf/get/response",
         files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?"},
+        data={"query": "What is this about?", "model": "openai"},
         headers=authenticated_user["headers"],
     )
 
@@ -161,7 +161,7 @@ async def test_rag_with_pdf_empty_extraction(
     response = await client.post(
         "/pdf/get/response",
         files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?"},
+        data={"query": "What is this about?", "model": "openai"},
         headers=authenticated_user["headers"],
     )
 
@@ -205,7 +205,7 @@ async def test_rag_with_pdf_qdrant_error(
     response = await client.post(
         "/pdf/get/response",
         files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?"},
+        data={"query": "What is this about?", "model": "openai"},
         headers=authenticated_user["headers"],
     )
 
@@ -255,7 +255,7 @@ async def test_rag_with_pdf_openai_error(
     response = await client.post(
         "/pdf/get/response",
         files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?"},
+        data={"query": "What is this about?", "model": "openai"},
         headers=authenticated_user["headers"],
     )
 
@@ -290,7 +290,7 @@ async def test_rag_with_pdf_unverified_user(
     response = await client.post(
         "/pdf/get/response",
         files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?"},
+        data={"query": "What is this about?", "model": "openai"},
         headers=headers,
     )
 
@@ -298,3 +298,107 @@ async def test_rag_with_pdf_unverified_user(
     data = response.json()
     assert "detail" in data
     assert "verified" in data["detail"].lower()
+
+
+@pytest.mark.asyncio
+@patch("app.routes.rag_with_pdf.get_rag_openai_response")
+@patch("app.routes.rag_with_pdf.QdrantVectorStore")
+@patch("app.routes.rag_with_pdf.OpenAIEmbeddings")
+@patch("app.routes.rag_with_pdf.RecursiveCharacterTextSplitter")
+@patch("app.routes.rag_with_pdf.PyPDFLoader")
+async def test_rag_with_pdf_model_selection_openai(
+    mock_pdf_loader,
+    mock_text_splitter,
+    mock_embeddings,
+    mock_qdrant_store,
+    mock_openai_response,
+    client: AsyncClient,
+    authenticated_user: dict,
+):
+    """Test that OpenAI model is selected when model='openai'."""
+    mock_doc = MagicMock()
+    mock_doc.page_content = "Sample PDF content"
+    mock_loader_instance = MagicMock()
+    mock_loader_instance.load.return_value = [mock_doc]
+    mock_pdf_loader.return_value = mock_loader_instance
+
+    mock_splitter_instance = MagicMock()
+    mock_splitter_instance.split_documents.return_value = [mock_doc]
+    mock_text_splitter.return_value = mock_splitter_instance
+
+    mock_embeddings.return_value = MagicMock()
+
+    mock_vectorstore = MagicMock()
+    mock_vectorstore.similarity_search.return_value = [mock_doc]
+    mock_qdrant_store.from_documents = MagicMock(return_value=mock_vectorstore)
+
+    mock_openai_response.return_value = "OpenAI response"
+
+    pdf_content = b"%PDF-1.4\nfake pdf content"
+    pdf_file = BytesIO(pdf_content)
+
+    response = await client.post(
+        "/pdf/get/response",
+        files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
+        data={"query": "What is this about?", "model": "openai"},
+        headers=authenticated_user["headers"],
+    )
+
+    assert response.status_code == 200
+    mock_openai_response.assert_called_once()
+    data = response.json()
+    assert data["content"] == "OpenAI response"
+
+
+@pytest.mark.asyncio
+@patch("app.routes.rag_with_pdf.get_rag_ollama_response")
+@patch("app.routes.rag_with_pdf.QdrantVectorStore")
+@patch("app.routes.rag_with_pdf.OpenAIEmbeddings")
+@patch("app.routes.rag_with_pdf.RecursiveCharacterTextSplitter")
+@patch("app.routes.rag_with_pdf.PyPDFLoader")
+async def test_rag_with_pdf_model_selection_ollama(
+    mock_pdf_loader,
+    mock_text_splitter,
+    mock_embeddings,
+    mock_qdrant_store,
+    mock_ollama_response,
+    client: AsyncClient,
+    authenticated_user: dict,
+):
+    """Test that Ollama model is selected when model='ollama'."""
+    mock_doc = MagicMock()
+    mock_doc.page_content = "Sample PDF content"
+    mock_loader_instance = MagicMock()
+    mock_loader_instance.load.return_value = [mock_doc]
+    mock_pdf_loader.return_value = mock_loader_instance
+
+    mock_splitter_instance = MagicMock()
+    mock_splitter_instance.split_documents.return_value = [mock_doc]
+    mock_text_splitter.return_value = mock_splitter_instance
+
+    mock_embeddings.return_value = MagicMock()
+
+    mock_vectorstore = MagicMock()
+    mock_vectorstore.similarity_search.return_value = [mock_doc]
+    mock_qdrant_store.from_documents = MagicMock(return_value=mock_vectorstore)
+
+    # Mock async function
+    async def async_mock(*args, **kwargs):
+        return "Ollama response"
+
+    mock_ollama_response.side_effect = async_mock
+
+    pdf_content = b"%PDF-1.4\nfake pdf content"
+    pdf_file = BytesIO(pdf_content)
+
+    response = await client.post(
+        "/pdf/get/response",
+        files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
+        data={"query": "What is this about?", "model": "ollama"},
+        headers=authenticated_user["headers"],
+    )
+
+    assert response.status_code == 200
+    mock_ollama_response.assert_called_once()
+    data = response.json()
+    assert data["content"] == "Ollama response"
