@@ -66,7 +66,7 @@ def send_verification_email(email: str, verification_token: str):
         msg = MIMEMultipart()
         msg["From"] = smtp_username
         msg["To"] = email
-        msg["Subject"] = "Verify Your Email - Image to Text API"
+        msg["Subject"] = "Verify Your Email - ScanGenAI API"
 
         body = f"""
         Please verify your email by clicking the link below:

@@ -14,6 +14,7 @@ from app.utils.utils import (
     extract_rec_texts,
     validate_image_file,
 )
+from app.utils.rag_openai_response import get_rag_openai_response
 
 __all__ = [
     "create_access_token",
@@ -26,4 +27,5 @@ __all__ = [
     "convert_result_to_text",
     "extract_rec_texts",
     "validate_image_file",
+    "get_rag_openai_response",
 ]

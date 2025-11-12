@@ -38,7 +38,7 @@ async def test_lifespan(_app: FastAPI):
     yield
 
 
-test_app = FastAPI(title="Test Image to Text API", lifespan=test_lifespan)
+test_app = FastAPI(title="Test ScanGenAI API", lifespan=test_lifespan)
 test_app.include_router(api_router)
 
 

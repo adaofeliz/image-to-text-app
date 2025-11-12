@@ -39,7 +39,7 @@ async def lifespan(_app: FastAPI):
     logger.info("Application shutting down...")
 
 
-app = FastAPI(title="Image to Text API", lifespan=lifespan)
+app = FastAPI(title="ScanGenAI API", lifespan=lifespan)
 
 # Add logging middleware
 app.add_middleware(LoggingMiddleware)

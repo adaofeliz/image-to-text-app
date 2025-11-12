@@ -71,7 +71,7 @@ def validate_image_file(file: UploadFile) -> None:
         file_extension = Path(file.filename).suffix.lower()
         if file_extension not in allowed_extensions:
             logger.warning(
-                f"Invalid file extension: {file_extension} for file: {file.filename}"
+                "Invalid file extension: %s for file: %s", file_extension, file.filename
             )
             raise HTTPException(
                 status_code=400,
@@ -81,7 +81,7 @@ def validate_image_file(file: UploadFile) -> None:
     # Check MIME type
     if file.content_type and file.content_type not in allowed_mime_types:
         logger.warning(
-            f"Invalid MIME type: {file.content_type} for file: {file.filename}"
+            "Invalid MIME type: %s for file: %s", file.content_type, file.filename
         )
         raise HTTPException(
             status_code=400,
