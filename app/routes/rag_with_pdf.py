@@ -14,9 +14,8 @@ from langchain_qdrant import QdrantVectorStore
 from app.database import User
 from app.dependencies import get_current_active_user
 from app.schemas import ResponseItem
-from app.utils import get_rag_openai_response
+from app.utils import get_rag_ollama_response, get_rag_openai_response
 from app.utils.logger import logger
-
 
 router = APIRouter()
 
@@ -25,9 +24,16 @@ router = APIRouter()
 async def rag_with_pdf(
     pdf: UploadFile = File(...),
     query: str = Form(...),
+    model: str = Form(...),
     _current_user: User = Depends(get_current_active_user),
 ) -> ResponseItem:
     """Process a PDF with a retrieval-augmented generation flow."""
+    # Validate model first
+    if model not in ["openai", "ollama"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model."
+        )
+
     pdf_content_type = (pdf.content_type or "").lower()
     pdf_filename = (pdf.filename or "").lower()
 
@@ -89,8 +95,11 @@ async def rag_with_pdf(
         search_results = await asyncio.to_thread(vectorstore.similarity_search, query)
         relevant_context = "\n\n".join([doc.page_content for doc in search_results])
 
-        # Get response from RAG model using OpenAI
-        response = get_rag_openai_response(query, relevant_context)
+        # Get response from RAG model using the model specified
+        if model == "openai":
+            response = get_rag_openai_response(query, relevant_context)
+        else:  # model == "ollama"
+            response = get_rag_ollama_response(query, relevant_context)
 
         return ResponseItem(content=response)
 
