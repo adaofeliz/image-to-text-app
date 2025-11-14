@@ -25,6 +25,7 @@ A FastAPI-based REST API service that converts images to text using OCR (Optical
 - **Authentication**: JWT (PyJWT), bcrypt for password hashing
 - **OCR Engine**: PaddleOCR
 - **RAG Framework**: LangChain (with OpenAI embeddings)
+- **LLM Options**: OpenAI GPT models or Ollama (local LLM)
 - **ML Framework**: PyTorch
 - **Python Version**: 3.11
 - **Container**: Docker & Docker Compose
@@ -60,6 +61,7 @@ A FastAPI-based REST API service that converts images to text using OCR (Optical
    - Health Check: `http://localhost:8000/health`
    - PostgreSQL: `postgresql://localhost:5432`
    - Qdrant Dashboard: `http://localhost:6333/dashboard`
+   - Ollama API: `http://localhost:11434`
 
 5. **Configure environment variables** (create `.env` file):
    ```env
@@ -71,23 +73,30 @@ A FastAPI-based REST API service that converts images to text using OCR (Optical
 ```
 image-to-text-app/
 ├── app/
+│   ├── __init__.py          # App package initialization
 │   ├── main.py              # FastAPI application entry point
 │   ├── database/
 │   │   ├── __init__.py      # Database module exports
 │   │   ├── database.py      # PostgreSQL connection and configuration
-│   │   └── models.py        # Database models (User, TokenBlacklist)
+│   │   └── models.py        # Database models (User, TokenBlacklist, PDFRequest)
 │   ├── dependencies/
 │   │   ├── __init__.py      # Dependencies module exports
 │   │   └── dependencies.py  # FastAPI dependencies for authentication
+│   ├── middleware/
+│   │   ├── __init__.py      # Middleware module exports
+│   │   └── logging_middleware.py  # Request/response logging middleware
 │   ├── schemas/
 │   │   ├── __init__.py      # Schemas module exports
-│   │   ├── schemas.py       # Pydantic models for API
+│   │   ├── schemas.py       # Pydantic models for API (ResponseItem)
 │   │   └── auth_schemas.py  # Authentication request/response models
 │   ├── utils/
 │   │   ├── __init__.py      # Utils module exports
 │   │   ├── auth_utils.py    # Authentication utilities (JWT, password hashing)
-│   │   ├── utils.py         # Utility functions for image processing
-│   │   └── rag_openai_response.py  # RAG utilities for OpenAI integration
+│   │   ├── logger.py        # Logging configuration
+│   │   ├── utils.py          # Utility functions for image processing
+│   │   ├── rag_openai_response.py    # RAG utilities for OpenAI integration
+│   │   ├── rag_ollama_response.py    # RAG utilities for Ollama integration
+│   │   └── rag_vectorstore.py        # Vector store utilities (load/process PDFs)
 │   ├── routes/
 │   │   ├── __init__.py      # Router initialization
 │   │   ├── health.py        # Health check endpoint
@@ -97,13 +106,21 @@ image-to-text-app/
 │   │   └── webhook.py       # Deployment webhook endpoint
 │   └── templates/
 │       └── NotFound.html    # 404 error page
+├── tests/
+│   ├── __init__.py          # Tests package initialization
+│   ├── conftest.py          # Pytest fixtures and configuration
+│   ├── test_auth.py         # Authentication route tests
+│   ├── test_image_to_text.py  # Image conversion route tests
+│   └── test_rag_with_pdf.py   # RAG with PDF route tests
+├── logs/                    # Application logs directory
 ├── Dockerfile               # Docker image configuration
 ├── docker-compose.yml       # Docker Compose configuration (development)
 ├── docker-compose.prod.yml  # Docker Compose configuration (production)
-├── deploy.sh                # Deployment script
 ├── requirements.txt         # Python dependencies
 ├── pytest.ini              # Pytest configuration
-├── .pylintrc               # Pylint configuration
+├── pyproject.toml          # Python project configuration
+├── pyrightconfig.json      # Pyright type checker configuration
+├── pull.sh                 # Git pull script
 ├── .gitignore              # Git ignore rules
 └── README.md               # This file
 ```
@@ -115,18 +132,20 @@ image-to-text-app/
 The `docker-compose.yml` includes:
 - PostgreSQL database service with health checks
 - Qdrant vector database service with health checks
+- Ollama service for local LLM inference
 - Volume mounting for hot-reload during development
 - Automatic file watching with `--reload` flag
 - Environment variable loading from `.env` file
-- Persistent data volumes for PostgreSQL and Qdrant
+- Persistent data volumes for PostgreSQL, Qdrant, and Ollama
 
 ### Production Mode
 
 The `docker-compose.prod.yml` includes:
 - PostgreSQL database service
 - Qdrant vector database service
+- Ollama service for local LLM inference
 - Web service without hot-reload
-- Persistent data volumes for both databases
+- Persistent data volumes for all services
 - Services wait for dependencies to be healthy before starting
 
 ## Error Handling
@@ -152,6 +171,8 @@ Key dependencies include:
 - `langchain-openai` - OpenAI embeddings integration
 - `langchain-qdrant` - Qdrant vector store integration
 - `qdrant-client` - Qdrant Python client
+- `ollama` - Ollama Python client for local LLM inference
+- `pypdf` - PDF processing library
 
 See `requirements.txt` for the complete list.
 
@@ -200,6 +221,7 @@ pytest -v
 - `tests/conftest.py` - Pytest fixtures and configuration
 - `tests/test_auth.py` - Authentication route tests
 - `tests/test_image_to_text.py` - Image conversion route tests
+- `tests/test_rag_with_pdf.py` - RAG with PDF route tests
 
 ### Test Coverage
 
