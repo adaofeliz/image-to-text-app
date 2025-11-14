@@ -64,9 +64,8 @@ A FastAPI-based REST API service that provides OCR (Optical Character Recognitio
    - Ollama API: `http://localhost:11434`
 
 5. **Configure environment variables** (create `.env` file):
-   ```env
-  Make sure you update the .env.example with your own values
-   ```
+   - Make sure you update the .env.example with your own values.
+
 
 ## Project Structure
 
