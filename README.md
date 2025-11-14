@@ -63,8 +63,8 @@ A FastAPI-based REST API service that provides OCR (Optical Character Recognitio
    - Qdrant Dashboard: `http://localhost:6333/dashboard`
    - Ollama API: `http://localhost:11434`
 
-5. **Configure environment variables** (create `.env` file):
-   - Make sure you update the .env.example with your own values.
+5. **Configure environment variables**:
+   - Make sure you update your .env with your own values.
 
 
 ## Project Structure
