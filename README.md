@@ -1,6 +1,6 @@
 # ScanGenAI API
 
-A FastAPI-based REST API service that converts images to text using OCR (Optical Character Recognition) powered by PaddleOCR.
+A FastAPI-based REST API service that provides OCR (Optical Character Recognition) for images and RAG (Retrieval-Augmented Generation) for PDF documents, powered by PaddleOCR, LangChain, and vector search with Qdrant.
 
 ## Features
 
