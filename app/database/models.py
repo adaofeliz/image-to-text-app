@@ -44,3 +44,20 @@ class TokenBlacklist(Base):
         server_default=text("CURRENT_TIMESTAMP"),
         nullable=False,
     )
+
+
+class PDFRequest(Base):
+    """PDF request model for storing request_id to collection_name mapping."""
+
+    __tablename__ = "pdf_requests"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    request_id = Column(String(36), unique=True, nullable=False, index=True)
+    collection_name = Column(String(255), nullable=False)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    filename = Column(String(255), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=text("CURRENT_TIMESTAMP"),
+        nullable=False,
+    )

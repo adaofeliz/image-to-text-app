@@ -8,7 +8,7 @@ from app.database.database import (
     get_db,
     init_db,
 )
-from app.database.models import TokenBlacklist, User
+from app.database.models import PDFRequest, TokenBlacklist, User
 
 __all__ = [
     "Base",
@@ -19,4 +19,5 @@ __all__ = [
     "check_connection",
     "User",
     "TokenBlacklist",
+    "PDFRequest",
 ]
