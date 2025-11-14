@@ -8,9 +8,9 @@ from pathlib import Path
 from fastapi import (
     APIRouter,
     Depends,
+    File,
     Form,
     HTTPException,
-    Request,
     UploadFile,
     status,
 )
@@ -30,7 +30,7 @@ router = APIRouter()
 
 @router.post("/pdf/get/response", response_model=ResponseItem, status_code=200)
 async def rag_with_pdf(
-    request: Request,
+    pdf: UploadFile | None = File(None),
     query: str = Form(...),
     model: str = Form(...),
     past_request_id: Optional[str] = Form(None),
@@ -38,7 +38,6 @@ async def rag_with_pdf(
     _current_user: User = Depends(get_current_active_user),
 ) -> ResponseItem:
     """Process a PDF with a retrieval-augmented generation flow.
-
     Either upload a new PDF or query an existing one using past_request_id.
     """
     # Validate model first
@@ -47,15 +46,9 @@ async def rag_with_pdf(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model."
         )
 
-    # Handle optional PDF file from form data
-    form = await request.form()
-    pdf_file = form.get("pdf")
-    pdf: Optional[UploadFile] = None
-    # Check if pdf_file has a filename attribute
-    if pdf_file and hasattr(pdf_file, "filename"):
-        filename = getattr(pdf_file, "filename", None)
-        if filename and filename.strip():
-            pdf = pdf_file  # type: ignore[assignment]
+    # Handle optional PDF file - check if it has a valid filename
+    if pdf and (not pdf.filename or not pdf.filename.strip()):
+        pdf = None
 
     vectorstore: QdrantVectorStore
     current_request_id: str

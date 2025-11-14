@@ -48,7 +48,7 @@ async def load_existing_vectorstore(
         )
     )
     pdf_request = result.scalar_one_or_none()
-
+    print("\n\npdf_request", pdf_request)
     if not pdf_request:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -67,6 +67,7 @@ async def load_existing_vectorstore(
         client=qdrant_client,
     )
 
+    print("\n\nvectorstore", vectorstore)
     return vectorstore, past_request_id
 
 
