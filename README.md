@@ -1,11 +1,12 @@
 # ScanGenAI API
 
-A FastAPI-based REST API service that provides OCR (Optical Character Recognition) for images and RAG (Retrieval-Augmented Generation) for PDF documents, powered by PaddleOCR, LangChain, and vector search with Qdrant.
+A FastAPI-based REST API service that provides OCR (Optical Character Recognition) for images, RAG (Retrieval-Augmented Generation) for PDF documents, and Speech-to-Text conversion for audio files, powered by PaddleOCR, LangChain, OpenAI Whisper, and vector search with Qdrant.
 
 ## Features
 
 - 🖼️ **Image to Text Conversion**: Upload images and extract text using advanced OCR
 - 📄 **RAG with PDF**: Upload PDFs and query them using Retrieval-Augmented Generation with vector search
+- 🎤 **Sound to Text Conversion**: Upload audio files and transcribe them using OpenAI Whisper model
 - 🔐 **Authentication System**: JWT-based authentication with PostgreSQL
 - 👤 **User Management**: Register, login, email verification, and token refresh
 - 🔒 **Protected Routes**: Secure endpoints with token-based authentication
@@ -24,6 +25,7 @@ A FastAPI-based REST API service that provides OCR (Optical Character Recognitio
 - **Vector Database**: Qdrant
 - **Authentication**: JWT (PyJWT), bcrypt for password hashing
 - **OCR Engine**: PaddleOCR
+- **Speech-to-Text**: OpenAI Whisper (via Hugging Face Transformers)
 - **RAG Framework**: LangChain (with OpenAI embeddings)
 - **LLM Options**: Multiple cloud models (OpenAI GPT, Google Gemini, DeepSeek) or Ollama (local LLM)
 - **ML Framework**: PyTorch
@@ -93,6 +95,7 @@ image-to-text-app/
 │   │   ├── auth_utils.py    # Authentication utilities (JWT, password hashing)
 │   │   ├── logger.py        # Logging configuration
 │   │   ├── utils.py          # Utility functions for image processing
+│   │   ├── convert_sound_to_text.py  # Sound to text conversion utility (Whisper)
 │   │   ├── rag_cloudmodel_response.py  # RAG utilities for cloud models (OpenAI, Gemini, DeepSeek)
 │   │   ├── rag_ollama_response.py      # RAG utilities for Ollama integration
 │   │   ├── rag_vectorstore.py          # Vector store utilities (load/process PDFs)
@@ -102,6 +105,7 @@ image-to-text-app/
 │   │   ├── health.py        # Health check endpoint
 │   │   ├── auth.py          # Authentication endpoints
 │   │   ├── image_to_text.py # Image to text conversion endpoint
+│   │   ├── sound_to_text.py # Sound to text conversion endpoint
 │   │   ├── rag_with_pdf.py  # RAG with PDF endpoint
 │   │   └── webhook.py       # Deployment webhook endpoint
 │   └── templates/
@@ -111,6 +115,7 @@ image-to-text-app/
 │   ├── conftest.py          # Pytest fixtures and configuration
 │   ├── test_auth.py         # Authentication route tests
 │   ├── test_image_to_text.py  # Image conversion route tests
+│   ├── test_sound_to_text.py  # Sound to text conversion route tests
 │   └── test_rag_with_pdf.py   # RAG with PDF route tests
 ├── logs/                    # Application logs directory
 ├── Dockerfile               # Docker image configuration
@@ -166,7 +171,11 @@ Key dependencies include:
 - `python-jose` - JWT encoding/decoding
 - `email-validator` - Email validation
 - `paddleocr` - OCR engine
+- `transformers` - Hugging Face Transformers library (for Whisper model)
 - `torch` - PyTorch for ML models
+- `librosa` - Audio analysis library
+- `soundfile` - Audio file I/O library
+- `numpy` - Numerical computing library
 - `uvicorn` - ASGI server
 - `pydantic` - Data validation
 - `langchain` - RAG framework
@@ -192,6 +201,7 @@ See `requirements.txt` for the complete list.
 
 ### Protected Routes
 - `/convert/image/text` - Requires valid access token and verified email
+- `/convert/sound/text` - Requires valid access token and verified email
 - `/pdf/get/response` - Requires valid access token and verified email
 - `/auth/refresh` - Requires valid refresh token
 - `/auth/logout` - Requires valid access token
@@ -224,6 +234,7 @@ pytest -v
 - `tests/conftest.py` - Pytest fixtures and configuration
 - `tests/test_auth.py` - Authentication route tests
 - `tests/test_image_to_text.py` - Image conversion route tests
+- `tests/test_sound_to_text.py` - Sound to text conversion route tests
 - `tests/test_rag_with_pdf.py` - RAG with PDF route tests
 
 ### Test Coverage
@@ -233,6 +244,7 @@ Tests cover:
 - Token refresh and logout
 - Protected route access
 - Image-to-text conversion
+- Sound-to-text conversion
 - RAG with PDF functionality
 - Error handling
 
