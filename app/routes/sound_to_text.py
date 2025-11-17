@@ -11,9 +11,16 @@ router = APIRouter()
 
 
 @router.post("/convert/sound/text", response_model=ResponseItem, status_code=200)
-async def transcribe_sound_to_text(file: UploadFile = File(...), _current_user: User = Depends(get_current_active_user)) -> ResponseItem:
+async def transcribe_sound_to_text(
+    file: UploadFile = File(...), _current_user: User = Depends(get_current_active_user)
+) -> ResponseItem:
     """Convert uploaded sound file to text."""
-    logger.info("Converting sound file to text request from user: %s (ID: %s) - File: %s", _current_user.email, _current_user.id, file.filename)
+    logger.info(
+        "Converting sound file to text request from user: %s (ID: %s) - File: %s",
+        _current_user.email,
+        _current_user.id,
+        file.filename,
+    )
     try:
         # Validate sound file
         if not validate_sound_file(file):
@@ -28,5 +35,8 @@ async def transcribe_sound_to_text(file: UploadFile = File(...), _current_user: 
         logger.info("Converted sound file to text: %s", text)
 
         return ResponseItem(content=text)
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error("Error converting sound to text: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e

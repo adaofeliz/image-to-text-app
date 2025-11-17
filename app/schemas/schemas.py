@@ -4,6 +4,6 @@ from pydantic import BaseModel, Field
 
 
 class ResponseItem(BaseModel):
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=0)
     description: Optional[str] = None
     request_id: Optional[str] = None

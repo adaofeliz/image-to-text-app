@@ -1,19 +1,31 @@
 import librosa
-import torch
-from transformers import WhisperProcessor, WhisperForConditionalGeneration
 import numpy as np
 from fastapi import HTTPException, UploadFile
 
 from app.utils.logger import logger
 
 
-# Load Whisper model & processor once
-MODEL_NAME = "openai/whisper-medium"
-processor = WhisperProcessor.from_pretrained(MODEL_NAME)
-model = WhisperForConditionalGeneration.from_pretrained(MODEL_NAME)
-model.eval()
-device = torch.device("cpu")
-model.to(device)
+_MODEL_NAME = "openai/whisper-medium"
+_processor = None
+_model = None
+_device = None
+
+
+def _load_model():
+    """Lazy load the Whisper model and processor."""
+    global _processor, _model, _device
+
+    if _processor is None or _model is None:
+        import torch
+        from transformers import WhisperProcessor, WhisperForConditionalGeneration
+
+        _processor = WhisperProcessor.from_pretrained(_MODEL_NAME)
+        _model = WhisperForConditionalGeneration.from_pretrained(_MODEL_NAME)
+        _model.eval()
+        _device = torch.device("cpu")
+        _model.to(_device)  # type: ignore[method-call]
+
+    return _processor, _model, _device
 
 
 def chunk_audio(audio: np.ndarray, chunk_size: int = 30_000):
@@ -33,6 +45,9 @@ def convert_sound_to_text(file: UploadFile) -> str:
     Converts audio to text using the Whisper model.
     """
     try:
+        # Lazy load model and processor
+        processor, model, device = _load_model()
+
         # Load audio and resample to 16 kHz
         audio_np, sr = librosa.load(file.file, sr=16000)
         logger.info("Loaded audio with sample rate %d", sr)
@@ -40,6 +55,9 @@ def convert_sound_to_text(file: UploadFile) -> str:
         # Split into chunks
         audio_chunks = chunk_audio(audio_np, chunk_size=32_000)
         logger.info("Split audio into %d chunks", len(audio_chunks))
+
+        # Lazy import torch for no_grad context
+        import torch
 
         transcription = ""
         for chunk in audio_chunks:
