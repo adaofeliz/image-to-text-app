@@ -1,9 +1,11 @@
 """RAG with PDF route."""
 
+import os
 import asyncio
 import uuid
 from typing import Optional
 from pathlib import Path
+from dotenv import load_dotenv
 
 from fastapi import (
     APIRouter,
@@ -21,11 +23,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import User, get_db
 from app.dependencies import get_current_active_user
 from app.schemas import ResponseItem
-from app.utils import get_rag_ollama_response, get_rag_openai_response
+from app.utils import (
+    get_rag_cloudmodel_response,
+    get_rag_ollama_response,
+    models_supported,
+)
 from app.utils.rag_vectorstore import load_existing_vectorstore, process_new_pdf
 from app.utils.logger import logger
 
 router = APIRouter()
+
+load_dotenv()
 
 
 @router.post("/pdf/get/response", response_model=ResponseItem, status_code=200)
@@ -34,6 +42,7 @@ async def rag_with_pdf(
     query: str = Form(...),
     model: str = Form(...),
     past_request_id: Optional[str] = Form(None),
+    openai_pass: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
     _current_user: User = Depends(get_current_active_user),
 ) -> ResponseItem:
@@ -41,11 +50,16 @@ async def rag_with_pdf(
     Either upload a new PDF or query an existing one using past_request_id.
     """
     # Validate model first
-    if model not in ["openai", "ollama"]:
+    if model not in models_supported:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model."
         )
 
+    if model == models_supported["openai"] and openai_pass != os.getenv("OPENAI_PASS"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect OpenAI password.",
+        )
     # Handle optional PDF file - check if it has a valid filename
     if pdf and (not pdf.filename or not pdf.filename.strip()):
         pdf = None
@@ -122,10 +136,11 @@ async def rag_with_pdf(
             else ""
         )
         # Get response from RAG model using the model specified
-        if model == "openai":
-            response = get_rag_openai_response(query, relevant_context)
-        else:  # model == "ollama"
+        response: str | None = None
+        if model == models_supported["ollama"]:
             response = await get_rag_ollama_response(query, relevant_context)
+        else:
+            response = get_rag_cloudmodel_response(query, relevant_context, model)
 
         return ResponseItem(content=response, request_id=current_request_id)
 

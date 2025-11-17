@@ -44,6 +44,56 @@ async def test_convert_image_invalid_file_type(
 
 
 @pytest.mark.asyncio
+@patch("app.routes.image_to_text.logger")
+async def test_convert_image_httpexception_logging(
+    mock_logger, client: AsyncClient, authenticated_user: dict
+):
+    """Test that HTTPException errors are logged and return 400 status code."""
+    text_file = BytesIO(b"This is not an image")
+
+    response = await client.post(
+        "/convert/image/text",
+        files={"image": ("test.txt", text_file, "text/plain")},
+        headers=authenticated_user["headers"],
+    )
+    
+    # Verify 400 status code is returned
+    assert response.status_code == 400
+    
+    # Verify error logging was called
+    mock_logger.error.assert_called_once()
+    error_call_args = mock_logger.error.call_args[0]
+    assert "HTTP error" in error_call_args[0]
+    assert "Status:" in error_call_args[0]
+    
+    # Verify error detail is preserved in response
+    data = response.json()
+    assert "detail" in data
+    assert "invalid" in data["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_convert_image_invalid_mime_type(
+    client: AsyncClient, authenticated_user: dict
+):
+    """Test image conversion with invalid MIME type."""
+    img = Image.new("RGB", (100, 100), color="red")
+    img_bytes = BytesIO()
+    img.save(img_bytes, format="PNG")
+    img_bytes.seek(0)
+
+    response = await client.post(
+        "/convert/image/text",
+        files={"image": ("test.png", img_bytes, "application/pdf")},
+        headers=authenticated_user["headers"],
+    )
+    assert response.status_code == 400
+    data = response.json()
+    assert "detail" in data
+    assert "mime" in data["detail"].lower() or "invalid" in data["detail"].lower()
+
+
+@pytest.mark.asyncio
 async def test_convert_image_missing_file(
     client: AsyncClient, authenticated_user: dict
 ):

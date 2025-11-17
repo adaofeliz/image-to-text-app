@@ -25,7 +25,7 @@ A FastAPI-based REST API service that provides OCR (Optical Character Recognitio
 - **Authentication**: JWT (PyJWT), bcrypt for password hashing
 - **OCR Engine**: PaddleOCR
 - **RAG Framework**: LangChain (with OpenAI embeddings)
-- **LLM Options**: OpenAI GPT models or Ollama (local LLM)
+- **LLM Options**: Multiple cloud models (OpenAI GPT, Google Gemini, DeepSeek) or Ollama (local LLM)
 - **ML Framework**: PyTorch
 - **Python Version**: 3.11
 - **Container**: Docker & Docker Compose
@@ -93,9 +93,10 @@ image-to-text-app/
 │   │   ├── auth_utils.py    # Authentication utilities (JWT, password hashing)
 │   │   ├── logger.py        # Logging configuration
 │   │   ├── utils.py          # Utility functions for image processing
-│   │   ├── rag_openai_response.py    # RAG utilities for OpenAI integration
-│   │   ├── rag_ollama_response.py    # RAG utilities for Ollama integration
-│   │   └── rag_vectorstore.py        # Vector store utilities (load/process PDFs)
+│   │   ├── rag_cloudmodel_response.py  # RAG utilities for cloud models (OpenAI, Gemini, DeepSeek)
+│   │   ├── rag_ollama_response.py      # RAG utilities for Ollama integration
+│   │   ├── rag_vectorstore.py          # Vector store utilities (load/process PDFs)
+│   │   └── constants.py                # Model constants and configuration
 │   ├── routes/
 │   │   ├── __init__.py      # Router initialization
 │   │   ├── health.py        # Health check endpoint
@@ -149,7 +150,9 @@ The `docker-compose.prod.yml` includes:
 
 ## Error Handling
 
-- **404 Not Found**: Custom HTML error page with available endpoints
+- **400 Bad Request**: Invalid model, missing required parameters, or validation errors
+- **403 Forbidden**: Unauthorized access or unverified email
+- **404 Not Found**: Custom HTML error page for invalid routes or request ID not found
 - **500 Internal Server Error**: Standard FastAPI error responses
 
 ## Dependencies
@@ -172,6 +175,7 @@ Key dependencies include:
 - `qdrant-client` - Qdrant Python client
 - `ollama` - Ollama Python client for local LLM inference
 - `pypdf` - PDF processing library
+- `openai` - OpenAI Python client (for GPT, Gemini, and DeepSeek models)
 
 See `requirements.txt` for the complete list.
 

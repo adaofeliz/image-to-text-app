@@ -54,9 +54,7 @@ async def convert_image_to_text(
         # Save uploaded file temporarily
         # Handle case where filename might be None
         suffix = Path(image.filename).suffix if image.filename else ""
-        with tempfile.NamedTemporaryFile(
-            delete=False, suffix=suffix
-        ) as tmp_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
             content = await image.read()
             tmp_file.write(content)
             tmp_file_path = tmp_file.name
@@ -86,8 +84,19 @@ async def convert_image_to_text(
         finally:
             # Clean up temporary file
             Path(tmp_file_path).unlink(missing_ok=True)
-    except HTTPException:
-        raise
+    except HTTPException as http_exc:
+        logger.error(
+            "HTTP error in image to text conversion for user %s (ID: %s) - File: %s - Status: %s - Detail: %s",
+            _current_user.email,
+            _current_user.id,
+            image.filename,
+            http_exc.status_code,
+            http_exc.detail,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=http_exc.detail,
+        ) from http_exc
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error(
             "Image to text conversion error for user %s: %s",

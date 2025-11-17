@@ -14,8 +14,9 @@ from app.utils.utils import (
     extract_rec_texts,
     validate_image_file,
 )
-from app.utils.rag_openai_response import get_rag_openai_response
 from app.utils.rag_ollama_response import get_rag_ollama_response
+from app.utils.rag_cloudmodel_response import get_rag_cloudmodel_response
+from app.utils.constants import models_supported, model_names
 
 __all__ = [
     "create_access_token",
@@ -28,6 +29,8 @@ __all__ = [
     "convert_result_to_text",
     "extract_rec_texts",
     "validate_image_file",
-    "get_rag_openai_response",
     "get_rag_ollama_response",
+    "get_rag_cloudmodel_response",
+    "models_supported",
+    "model_names",
 ]
