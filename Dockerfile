@@ -38,6 +38,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # copy app
 COPY ./app ./app
 
+# copy pull script
+COPY pull.sh ./
+
+# make script executable
+RUN chmod +x pull.sh
+
 ENV PYTHONUNBUFFERED=1
 
 # expose port

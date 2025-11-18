@@ -59,6 +59,7 @@ services:
     env_file:
       - .env
     volumes:
+      - ./pull.sh:/app/pull.sh
       - ./logs:/app/logs
     restart: unless-stopped
     depends_on:
