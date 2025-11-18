@@ -114,11 +114,13 @@ def validate_sound_file(file: UploadFile) -> bool:
         "audio/flac",
         "audio/wma",
         "audio/mp4",
+        "audio/mp3",
     }
-
+    
     # Check file extension
     if file.filename:
         file_extension = Path(file.filename).suffix.lower()
+        logger.info("file_extension: %s", file_extension)
         if file_extension not in allowed_extensions:
             logger.warning(
                 "Invalid file extension: %s for file: %s", file_extension, file.filename
