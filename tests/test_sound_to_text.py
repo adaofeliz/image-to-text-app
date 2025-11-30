@@ -1,4 +1,4 @@
-"""Tests for sound to text conversion routes."""
+"""Tests for sound to text conversion routes (queue-based API)."""
 
 from io import BytesIO
 from unittest.mock import patch
@@ -13,7 +13,6 @@ from app.utils import create_access_token, get_password_hash
 @pytest.mark.asyncio
 async def test_convert_sound_unauthorized(client: AsyncClient):
     """Test sound conversion without authentication."""
-    # Create a mock audio file (WAV format)
     audio_bytes = BytesIO(b"fake audio content")
 
     response = await client.post(
@@ -52,92 +51,90 @@ async def test_convert_sound_missing_file(
 
 
 @pytest.mark.asyncio
-@patch("app.routes.sound_to_text.convert_sound_to_text")
+@patch("app.routes.sound_to_text.Path.mkdir")
+@patch("app.routes.sound_to_text.enqueue_sound_job")
 async def test_convert_sound_success(
-    mock_convert_sound, client: AsyncClient, authenticated_user: dict
+    mock_enqueue,
+    _mock_mkdir,
+    client: AsyncClient,
+    authenticated_user: dict,
 ):
-    """Test successful sound to text conversion."""
-    mock_convert_sound.return_value = "This is a test transcription"
+    """Test successful sound-to-text job enqueue."""
+    mock_enqueue.return_value = "test-job-id-123"
 
-    # Create a mock audio file (WAV format)
     audio_bytes = BytesIO(b"fake audio content")
 
-    response = await client.post(
-        "/convert/sound/text",
-        files={"file": ("test.wav", audio_bytes, "audio/wav")},
-        headers=authenticated_user["headers"],
-    )
-    assert response.status_code == 200
+    with patch("app.routes.sound_to_text.tempfile.NamedTemporaryFile") as mock_temp:
+        mock_temp.return_value.__enter__.return_value.name = "/tmp/test.wav"
+
+        response = await client.post(
+            "/convert/sound/text",
+            files={"file": ("test.wav", audio_bytes, "audio/wav")},
+            headers=authenticated_user["headers"],
+        )
+
+    assert response.status_code == 202
     data = response.json()
-    assert "content" in data
-    assert data["content"] == "This is a test transcription"
-    mock_convert_sound.assert_called_once()
+    assert "message_id" in data
+    assert data["message_id"] == "test-job-id-123"
+    assert data["status"] == "queued"
+    mock_enqueue.assert_called_once()
 
 
 @pytest.mark.asyncio
-@patch("app.routes.sound_to_text.convert_sound_to_text")
-async def test_convert_sound_empty_result(
-    mock_convert_sound, client: AsyncClient, authenticated_user: dict
+@patch("app.routes.sound_to_text.Path.mkdir")
+@patch("app.routes.sound_to_text.enqueue_sound_job")
+async def test_convert_sound_empty_file(
+    mock_enqueue,
+    _mock_mkdir,
+    client: AsyncClient,
+    authenticated_user: dict,
 ):
-    """Test sound conversion with empty transcription result."""
-    mock_convert_sound.return_value = ""
+    """Test sound conversion with empty file."""
+    empty_file = BytesIO(b"")
 
-    audio_bytes = BytesIO(b"fake audio content")
+    with patch("app.routes.sound_to_text.tempfile.NamedTemporaryFile") as mock_temp:
+        mock_temp.return_value.__enter__.return_value.name = "/tmp/empty.wav"
 
-    response = await client.post(
-        "/convert/sound/text",
-        files={"file": ("test.wav", audio_bytes, "audio/wav")},
-        headers=authenticated_user["headers"],
-    )
-    assert response.status_code == 200
+        response = await client.post(
+            "/convert/sound/text",
+            files={"file": ("empty.wav", empty_file, "audio/wav")},
+            headers=authenticated_user["headers"],
+        )
+
+    assert response.status_code == 400
     data = response.json()
-    assert "content" in data
-    assert data["content"] == ""
+    assert "detail" in data
+    assert "empty" in data["detail"].lower()
+    mock_enqueue.assert_not_called()
 
 
 @pytest.mark.asyncio
-@patch("app.routes.sound_to_text.convert_sound_to_text")
-async def test_convert_sound_conversion_error(
-    mock_convert_sound, client: AsyncClient, authenticated_user: dict
+@patch("app.routes.sound_to_text.enqueue_sound_job")
+async def test_convert_sound_enqueue_failure(
+    mock_enqueue,
+    client: AsyncClient,
+    authenticated_user: dict,
 ):
-    """Test sound conversion when conversion fails."""
-    from fastapi import HTTPException
-
-    mock_convert_sound.side_effect = HTTPException(
-        status_code=500, detail="Audio processing failed"
-    )
+    """Test sound conversion when enqueue fails."""
+    mock_enqueue.side_effect = Exception("Redis connection failed")
 
     audio_bytes = BytesIO(b"fake audio content")
 
-    response = await client.post(
-        "/convert/sound/text",
-        files={"file": ("test.wav", audio_bytes, "audio/wav")},
-        headers=authenticated_user["headers"],
-    )
-    # The route catches all exceptions and returns 500
+    with patch("app.routes.sound_to_text.Path.mkdir"):
+        with patch("app.routes.sound_to_text.tempfile.NamedTemporaryFile") as mock_temp:
+            mock_temp.return_value.__enter__.return_value.name = "/tmp/test.wav"
+
+            response = await client.post(
+                "/convert/sound/text",
+                files={"file": ("test.wav", audio_bytes, "audio/wav")},
+                headers=authenticated_user["headers"],
+            )
+
     assert response.status_code == 500
     data = response.json()
     assert "detail" in data
-
-
-@pytest.mark.asyncio
-@patch("app.routes.sound_to_text.convert_sound_to_text")
-async def test_convert_sound_general_exception(
-    mock_convert_sound, client: AsyncClient, authenticated_user: dict
-):
-    """Test sound conversion when a general exception occurs."""
-    mock_convert_sound.side_effect = Exception("Unexpected error")
-
-    audio_bytes = BytesIO(b"fake audio content")
-
-    response = await client.post(
-        "/convert/sound/text",
-        files={"file": ("test.wav", audio_bytes, "audio/wav")},
-        headers=authenticated_user["headers"],
-    )
-    assert response.status_code == 500
-    data = response.json()
-    assert "detail" in data
+    assert "failed" in data["detail"].lower()
 
 
 @pytest.mark.asyncio
@@ -173,12 +170,16 @@ async def test_convert_sound_unverified_user(
 
 
 @pytest.mark.asyncio
-@patch("app.routes.sound_to_text.convert_sound_to_text")
+@patch("app.routes.sound_to_text.Path.mkdir")
+@patch("app.routes.sound_to_text.enqueue_sound_job")
 async def test_convert_sound_different_formats(
-    mock_convert_sound, client: AsyncClient, authenticated_user: dict
+    mock_enqueue,
+    _mock_mkdir,
+    client: AsyncClient,
+    authenticated_user: dict,
 ):
     """Test sound conversion with different audio formats."""
-    mock_convert_sound.return_value = "Transcribed text"
+    mock_enqueue.return_value = "test-job-id"
 
     formats = [
         ("wav", "audio/wav"),
@@ -189,41 +190,13 @@ async def test_convert_sound_different_formats(
     for ext, mime_type in formats:
         audio_bytes = BytesIO(b"fake audio content")
 
-        response = await client.post(
-            "/convert/sound/text",
-            files={"file": (f"test.{ext}", audio_bytes, mime_type)},
-            headers=authenticated_user["headers"],
-        )
-        # Should either succeed or fail validation, but not crash
-        assert response.status_code in [200, 400]
+        with patch("app.routes.sound_to_text.tempfile.NamedTemporaryFile") as mock_temp:
+            mock_temp.return_value.__enter__.return_value.name = f"/tmp/test.{ext}"
 
-
-@pytest.mark.asyncio
-@patch("app.routes.sound_to_text.logger")
-@patch("app.routes.sound_to_text.convert_sound_to_text")
-async def test_convert_sound_logging(
-    mock_convert_sound, mock_logger, client: AsyncClient, authenticated_user: dict
-):
-    """Test that sound conversion logs appropriately."""
-    mock_convert_sound.return_value = "Test transcription"
-
-    audio_bytes = BytesIO(b"fake audio content")
-
-    response = await client.post(
-        "/convert/sound/text",
-        files={"file": ("test.wav", audio_bytes, "audio/wav")},
-        headers=authenticated_user["headers"],
-    )
-
-    assert response.status_code == 200
-    # Verify logging was called
-    assert mock_logger.info.called
-    # Check that conversion logging was called
-    log_calls = [str(call) for call in mock_logger.info.call_args_list]
-    assert any(
-        "Converting sound file" in str(call) for call in mock_logger.info.call_args_list
-    )
-    assert any(
-        "Converted sound file to text" in str(call)
-        for call in mock_logger.info.call_args_list
-    )
+            response = await client.post(
+                "/convert/sound/text",
+                files={"file": (f"test.{ext}", audio_bytes, mime_type)},
+                headers=authenticated_user["headers"],
+            )
+            # Should either succeed (202) or fail validation (400)
+            assert response.status_code in [202, 400]

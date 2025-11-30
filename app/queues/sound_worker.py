@@ -1,10 +1,11 @@
+"""Worker functions for processing sound-to-text jobs."""
+
 import os
-import tempfile
 from pathlib import Path
+from typing import Dict, Any
 
 import librosa
 import numpy as np
-from fastapi import HTTPException, UploadFile
 
 from app.utils.logger import logger
 
@@ -23,19 +24,20 @@ def _load_model():
         import torch
         from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
+        logger.info("Loading Whisper model: %s", _MODEL_NAME)
         _PROCESSOR = WhisperProcessor.from_pretrained(_MODEL_NAME)
         _MODEL = WhisperForConditionalGeneration.from_pretrained(_MODEL_NAME)
         _MODEL.eval()
         _DEVICE = torch.device("cpu")
         _MODEL.to(_DEVICE)  # type: ignore[method-call]
+        logger.info("Whisper model loaded successfully")
 
     return _PROCESSOR, _MODEL, _DEVICE
 
 
-def chunk_audio(audio: np.ndarray, chunk_size: int = 30_000):
+def _chunk_audio(audio: np.ndarray, chunk_size: int = 30_000):
     """
     Splits audio into overlapping chunks to avoid memory issues.
-    chunk_size is in samples (~2s at 16kHz = 32_000 samples)
     """
     chunks = []
     for start in range(0, len(audio), chunk_size):
@@ -44,35 +46,38 @@ def chunk_audio(audio: np.ndarray, chunk_size: int = 30_000):
     return chunks
 
 
-def convert_sound_to_text(file: UploadFile) -> str:
-    """
-    Converts audio to text using the Whisper model.
-    """
+def process_sound_job_sync(job_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Synchronous implementation of sound-to-text job processing."""
+    audio_file_path = job_data["audio_file_path"]
+    filename = job_data.get("filename", "audio.wav")
+
+    logger.info("Processing sound-to-text job for file: %s", filename)
+
     temp_file_path = None
     try:
         # Lazy load model and processor
         processor, model, device = _load_model()
 
-        # Save uploaded file to temp file (required for formats like M4A that need ffmpeg)
-        suffix = Path(file.filename).suffix if file.filename else ".wav"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
-            content = file.file.read()
-            tmp_file.write(content)
-            temp_file_path = tmp_file.name
+        # Check if file exists
+        if not Path(audio_file_path).exists():
+            raise ValueError(f"Audio file not found: {audio_file_path}")
+
+        temp_file_path = audio_file_path
 
         # Load audio from file path and resample to 16 kHz
         audio_np, sr = librosa.load(temp_file_path, sr=16000)
         logger.info("Loaded audio with sample rate %d", sr)
 
         # Split into chunks
-        audio_chunks = chunk_audio(audio_np, chunk_size=32_000)
+        audio_chunks = _chunk_audio(audio_np, chunk_size=32_000)
         logger.info("Split audio into %d chunks", len(audio_chunks))
 
         # Lazy import torch for no_grad context
         import torch
 
         transcription = ""
-        for chunk in audio_chunks:
+        for i, chunk in enumerate(audio_chunks):
+            logger.info("Processing chunk %d/%d", i + 1, len(audio_chunks))
             inputs = processor(chunk, sampling_rate=sr, return_tensors="pt")
             input_features = inputs.input_features.to(device)
             attention_mask = (
@@ -90,13 +95,21 @@ def convert_sound_to_text(file: UploadFile) -> str:
             text = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
             transcription += text + " "
 
-        return transcription.strip()
+        result_text = transcription.strip()
+        logger.info("Transcription completed: %d characters", len(result_text))
+
+        return {
+            "content": result_text,
+            "filename": filename,
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error("Error processing sound-to-text job: %s", e, exc_info=True)
+        raise
     finally:
         # Clean up temp file
         if temp_file_path and os.path.exists(temp_file_path):
             try:
                 os.unlink(temp_file_path)
-            except Exception:
-                pass
+                logger.info("Cleaned up temp file: %s", temp_file_path)
+            except Exception as cleanup_exc:
+                logger.warning("Failed to clean up temp file: %s", cleanup_exc)

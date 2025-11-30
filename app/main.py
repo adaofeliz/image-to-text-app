@@ -16,7 +16,7 @@ from app.routes import router as api_router
 from app.utils.logger import logger
 
 # Import queues module to register Dramatiq actors
-import app.queues.rag_queue  # type: ignore  # noqa: F401
+import app.queues.job_queue  # type: ignore  # noqa: F401
 
 
 load_dotenv()

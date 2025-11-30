@@ -17,14 +17,9 @@ from fastapi import (
 )
 from app.database import User
 from app.dependencies import get_current_active_user
-from app.schemas import (
-    RAGJobQueuedResponse,
-    RAGJobStatusFailed,
-    RAGJobStatusPending,
-    ResponseItem,
-)
+from app.schemas import JobQueuedResponse
 from app.utils import models_supported
-from app.queues import enqueue_rag_job, get_job_status
+from app.queues import enqueue_rag_job
 from app.utils.logger import logger
 
 router = APIRouter()
@@ -35,7 +30,7 @@ load_dotenv()
 @router.post(
     "/pdf/get/response",
     status_code=status.HTTP_202_ACCEPTED,
-    response_model=RAGJobQueuedResponse,
+    response_model=JobQueuedResponse,
 )
 async def rag_with_pdf(
     pdf: UploadFile | None = File(None),
@@ -44,11 +39,11 @@ async def rag_with_pdf(
     past_request_id: Optional[str] = Form(None),
     openai_pass: Optional[str] = Form(None),
     _current_user: User = Depends(get_current_active_user),
-) -> RAGJobQueuedResponse:
+) -> JobQueuedResponse:
     """Queue a PDF RAG processing job.
 
     Either upload a new PDF or query an existing one using past_request_id.
-    Returns a job ID that can be used to check the status and retrieve results.
+    Returns a job ID that can be used to check the status via GET /job/{message_id}.
     """
     # Validate model first
     if model not in models_supported:
@@ -122,10 +117,10 @@ async def rag_with_pdf(
             job_id,
         )
 
-        return RAGJobQueuedResponse(
+        return JobQueuedResponse(
             message_id=job_id,
             status="queued",
-            message="Job has been queued for processing. Use the message_id to check status.",
+            message="Job has been queued for processing. Use GET /job/{message_id} to check status.",
         )
 
     except HTTPException:
@@ -141,54 +136,4 @@ async def rag_with_pdf(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to enqueue the job. Please try again later.",
-        ) from exc
-
-
-@router.get(
-    "/job/{message_id}",
-    status_code=status.HTTP_200_OK,
-    response_model=ResponseItem | RAGJobStatusPending | RAGJobStatusFailed,
-)
-def get_rag_job_status(
-    message_id: str,
-    _current_user: User = Depends(get_current_active_user),
-) -> ResponseItem | RAGJobStatusPending | RAGJobStatusFailed:
-    """Get the status of a RAG PDF processing job.
-
-    Returns the job status and result if completed.
-    """
-    try:
-        status_info = get_job_status(message_id)
-
-        # If job is finished, return result
-        if status_info["status"] == "finished" and status_info.get("result"):
-            result = status_info["result"]
-            return ResponseItem(
-                content=result.get("content", ""),
-                request_id=result.get("request_id"),
-            )
-
-        # If job is pending
-        if status_info["status"] == "pending":
-            return RAGJobStatusPending(
-                message_id=message_id,
-                status="pending",
-                message=status_info.get("message", "Job is being processed"),
-            )
-
-        # If job failed or unknown status
-        job_status = status_info["status"]
-        if job_status not in ("failed", "unknown"):
-            job_status = "unknown"
-        return RAGJobStatusFailed(
-            message_id=message_id,
-            status=job_status,  # type: ignore[arg-type]
-            error=status_info.get("error", "Unknown error"),
-        )
-
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.error("Failed to get job status: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve job status.",
         ) from exc

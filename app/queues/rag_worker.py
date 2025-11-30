@@ -114,7 +114,7 @@ async def process_rag_job_async(job_data: Dict[str, Any]) -> Dict[str, Any]:
             search_results = await asyncio.to_thread(
                 vectorstore.similarity_search,
                 query,
-                k=20,
+                k=100,
                 filter=filter_condition,
             )
 
@@ -128,7 +128,7 @@ async def process_rag_job_async(job_data: Dict[str, Any]) -> Dict[str, Any]:
                 all_results = await asyncio.to_thread(
                     vectorstore.similarity_search,
                     query,
-                    k=20,
+                    k=100,
                 )
                 if all_results:
                     search_results = all_results

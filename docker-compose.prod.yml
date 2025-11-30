@@ -94,7 +94,7 @@ services:
     volumes:
       - ./logs:/app/logs
       - shared_pdfs:/app/shared_pdfs
-    command: dramatiq app.queues.rag_queue --processes 1 --threads 4
+    command: dramatiq app.queues.job_queue --processes 1 --threads 8
     restart: unless-stopped
     depends_on:
       postgres:

@@ -1,42 +1,107 @@
-from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
+"""Sound to text conversion routes."""
+
+import tempfile
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, status
 
 from app.database import User
 from app.dependencies.dependencies import get_current_active_user
-from app.schemas import ResponseItem
-from app.utils import convert_sound_to_text
+from app.schemas import JobQueuedResponse
+from app.queues import enqueue_sound_job
 from app.utils.logger import logger
 from app.utils.utils import validate_sound_file
 
 router = APIRouter()
 
+# Shared directory for audio files (same as PDFs)
+SHARED_AUDIO_DIR = Path("/app/shared_pdfs")
 
-@router.post("/convert/sound/text", response_model=ResponseItem, status_code=200)
-def transcribe_sound_to_text(
-    file: UploadFile = File(...), _current_user: User = Depends(get_current_active_user)
-) -> ResponseItem:
-    """Convert uploaded sound file to text."""
+
+@router.post(
+    "/convert/sound/text",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=JobQueuedResponse,
+)
+async def transcribe_sound_to_text(
+    file: UploadFile = File(...),
+    _current_user: User = Depends(get_current_active_user),
+) -> JobQueuedResponse:
+    """Queue a sound-to-text conversion job.
+
+    Returns a job ID that can be used to check the status via GET /job/{message_id}.
+    """
     logger.info(
-        "Converting sound file to text request from user: %s (ID: %s) - File: %s",
+        "Sound-to-text request from user: %s (ID: %s) - File: %s",
         _current_user.email,
         _current_user.id,
         file.filename,
     )
+
+    # Validate sound file
+    if not validate_sound_file(file):
+        logger.error("Invalid sound file: %s", file.filename)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid sound file.",
+        )
+
+    audio_file_path: str | None = None
     try:
-        # Validate sound file
-        if not validate_sound_file(file):
-            logger.error("Invalid sound file: %s", file.filename)
-            raise HTTPException(status_code=400, detail="Invalid sound file.")
+        # Save audio to shared volume for worker access
+        SHARED_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
-        logger.info("Converting sound file: %s", file.filename)
+        suffix = Path(file.filename).suffix if file.filename else ".wav"
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=suffix, dir=str(SHARED_AUDIO_DIR)
+        ) as tmp_file:
+            content = await file.read()
+            if not content:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="The uploaded audio file is empty.",
+                )
+            tmp_file.write(content)
+            audio_file_path = tmp_file.name
 
-        # Convert sound file to text
-        text = convert_sound_to_text(file)
+        # Enqueue the job
+        job_data = {
+            "audio_file_path": audio_file_path,
+            "filename": file.filename or "audio.wav",
+            "user_id": str(_current_user.id),
+        }
+        job_id = enqueue_sound_job(job_data)
 
-        logger.info("Converted sound file to text: %s", text)
+        logger.info(
+            "Sound-to-text job enqueued for user %s (ID: %s) - Job ID: %s",
+            _current_user.email,
+            _current_user.id,
+            job_id,
+        )
 
-        return ResponseItem(content=text)
+        return JobQueuedResponse(
+            message_id=job_id,
+            status="queued",
+            message="Job has been queued for processing. Use GET /job/{message_id} to check status.",
+        )
+
     except HTTPException:
+        # Clean up temp file on validation errors
+        if audio_file_path and Path(audio_file_path).exists():
+            try:
+                Path(audio_file_path).unlink(missing_ok=True)
+            except Exception:
+                pass
         raise
-    except Exception as e:
-        logger.error("Error converting sound to text: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    except Exception as exc:
+        logger.error("Failed to enqueue sound-to-text job: %s", exc, exc_info=True)
+        # Clean up temp file if created
+        if audio_file_path and Path(audio_file_path).exists():
+            try:
+                Path(audio_file_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to enqueue the job. Please try again later.",
+        ) from exc

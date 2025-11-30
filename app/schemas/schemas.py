@@ -11,8 +11,13 @@ class ResponseItem(BaseModel):
     request_id: Optional[str] = None
 
 
-class RAGJobQueuedResponse(BaseModel):
-    """Response schema when a RAG job is successfully queued."""
+# =============================================================================
+# Generic Job Queue Schemas (shared by RAG and Sound jobs)
+# =============================================================================
+
+
+class JobQueuedResponse(BaseModel):
+    """Response schema when a job is successfully queued."""
 
     message_id: str = Field(..., description="Unique job identifier")
     status: Literal["queued"] = Field(default="queued", description="Job status")
@@ -29,17 +34,35 @@ class RAGJobQueuedResponse(BaseModel):
     }
 
 
-class RAGJobStatusPending(BaseModel):
-    """Response schema when a RAG job is still pending/processing."""
+class JobStatusPending(BaseModel):
+    """Response schema when a job is still pending/processing."""
 
     message_id: str = Field(..., description="Unique job identifier")
     status: Literal["pending"] = Field(..., description="Job status")
     message: str = Field(..., description="Status message")
 
 
-class RAGJobStatusFailed(BaseModel):
-    """Response schema when a RAG job has failed."""
+class JobStatusFailed(BaseModel):
+    """Response schema when a job has failed."""
 
     message_id: str = Field(..., description="Unique job identifier")
     status: Literal["failed", "unknown"] = Field(..., description="Job status")
     error: str = Field(..., description="Error message")
+
+
+# Aliases for backward compatibility
+RAGJobQueuedResponse = JobQueuedResponse
+RAGJobStatusPending = JobStatusPending
+RAGJobStatusFailed = JobStatusFailed
+
+
+# =============================================================================
+# Sound-to-Text Response Schemas
+# =============================================================================
+
+
+class SoundJobResult(BaseModel):
+    """Response schema for completed sound-to-text job result."""
+
+    content: str = Field(..., description="Transcribed text")
+    filename: Optional[str] = Field(None, description="Original filename")
