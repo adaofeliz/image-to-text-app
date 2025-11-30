@@ -16,6 +16,13 @@ def get_rag_cloudmodel_response(query: str, relevant_context: str, model: str) -
     The context is provided in the following format:
     {relevant_context}
     Your answer should be concise and accurate based on the context provided. Do not hallucinate or make up information.
+    And finally provide your answers in a markdown format. This is very important.
+    For example, if the answer is "The answer is 42", the response should be:
+    ```markdown
+    The answer is 42
+    ```
+    Do not use any other formatting.
+    Do not use any other formatting.
     """
 
     client = None  # type: ignore

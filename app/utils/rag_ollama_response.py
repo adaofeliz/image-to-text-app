@@ -15,6 +15,13 @@ async def get_rag_ollama_response(query: str, relevant_context: str) -> str:
       Question: {query}
 
       Answer concisely using only the context provided. Do not make up information.
+      And finally provide your answers in a markdown format. This is very important.
+      For example, if the answer is "The answer is 42", the response should be:
+      ```markdown
+      The answer is 42
+      ```
+      Do not use any other formatting.
+      Do not use any other formatting.
     """
 
     def _generate():
