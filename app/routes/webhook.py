@@ -29,9 +29,8 @@ async def git_pull_webhook(  # pylint: disable=unused-argument
 
         # Try multiple possible locations for pull.sh
         possible_paths = [
-            Path("/app/project/pull.sh"),  # If running in Docker with mounted volume
-            project_root / "pull.sh",  # Standard location (relative to webhook.py)
-            Path.cwd() / "pull.sh",  # Current working directory
+            Path("/app/pull.sh"),
+            project_root / "pull.sh",
         ]
 
         pull_script = None
