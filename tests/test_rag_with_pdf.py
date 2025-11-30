@@ -1,10 +1,9 @@
-"""Tests for RAG with PDF routes."""
+"""Tests for RAG with PDF routes (queue-based API)."""
 
 from io import BytesIO
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException, status
 from httpx import AsyncClient
 
 from app.database import User
@@ -26,55 +25,29 @@ async def test_rag_with_pdf_unauthorized(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_rag_with_pdf_invalid_file_type(
+async def test_rag_with_pdf_invalid_model(
     client: AsyncClient, authenticated_user: dict
 ):
-    """Test RAG with PDF using invalid file type."""
-    text_file = BytesIO(b"This is not a PDF")
+    """Test RAG with PDF with invalid model parameter."""
+    pdf_content = b"%PDF-1.4\nfake pdf content"
+    pdf_file = BytesIO(pdf_content)
 
     response = await client.post(
         "/pdf/get/response",
-        files={"pdf": ("test.txt", text_file, "text/plain")},
-        data={"query": "What is this about?", "model": "ollama"},
+        files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
+        data={"query": "What is this about?", "model": "invalid-model"},
         headers=authenticated_user["headers"],
     )
+
     assert response.status_code == 400
     data = response.json()
     assert "detail" in data
-    assert "invalid" in data["detail"].lower() or "pdf" in data["detail"].lower()
-
-
-@pytest.mark.asyncio
-@patch("app.routes.rag_with_pdf.process_new_pdf")
-async def test_rag_with_pdf_empty_file(
-    mock_process_new_pdf,
-    client: AsyncClient,
-    authenticated_user: dict,
-):
-    """Test RAG with PDF using empty file."""
-    # Mock process_new_pdf to raise HTTPException for empty file
-    mock_process_new_pdf.side_effect = HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="The uploaded PDF file is empty.",
-    )
-
-    empty_file = BytesIO(b"")
-
-    response = await client.post(
-        "/pdf/get/response",
-        files={"pdf": ("empty.pdf", empty_file, "application/pdf")},
-        data={"query": "What is this about?", "model": "ollama"},
-        headers=authenticated_user["headers"],
-    )
-    assert response.status_code == 400
-    data = response.json()
-    assert "detail" in data
-    assert "empty" in data["detail"].lower()
+    assert "invalid" in data["detail"].lower()
 
 
 @pytest.mark.asyncio
 async def test_rag_with_pdf_missing_file(client: AsyncClient, authenticated_user: dict):
-    """Test RAG with PDF without file."""
+    """Test RAG with PDF without file or past_request_id."""
     response = await client.post(
         "/pdf/get/response",
         data={"query": "What is this about?", "model": "ollama"},
@@ -108,151 +81,68 @@ async def test_rag_with_pdf_missing_query(
 
 @pytest.mark.asyncio
 @patch("app.routes.rag_with_pdf.os.getenv")
-@patch("app.routes.rag_with_pdf.get_rag_cloudmodel_response")
-@patch("app.routes.rag_with_pdf.process_new_pdf")
-async def test_rag_with_pdf_success(
-    mock_process_new_pdf,
-    mock_cloudmodel_response,
+async def test_rag_with_pdf_incorrect_openai_pass(
     mock_getenv,
     client: AsyncClient,
     authenticated_user: dict,
 ):
-    """Test successful RAG with PDF processing."""
-    mock_getenv.return_value = "test-pass"
-    
-    # Mock document
-    mock_doc = MagicMock()
-    mock_doc.page_content = "Sample PDF content"
-    mock_doc.metadata = {"request_id": "test-request-id"}
-
-    # Mock vectorstore
-    mock_vectorstore = MagicMock()
-    mock_vectorstore.similarity_search.return_value = [mock_doc]
-
-    # Mock process_new_pdf utility function
-    mock_process_new_pdf.return_value = (
-        mock_vectorstore,
-        "test-request-id",
-        "/tmp/test.pdf",
-    )
-
-    # Mock cloudmodel response
-    mock_cloudmodel_response.return_value = "This is the answer based on the PDF content"
+    """Test RAG with PDF with incorrect OpenAI password."""
+    mock_getenv.return_value = "correct-password"
 
     pdf_content = b"%PDF-1.4\nfake pdf content"
     pdf_file = BytesIO(pdf_content)
-    pdf_file.seek(0)
 
     response = await client.post(
         "/pdf/get/response",
         files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?", "model": "openai", "openai_pass": "test-pass"},
-        headers=authenticated_user["headers"],
-    )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert "content" in data
-    assert "request_id" in data
-    assert data["content"] == "This is the answer based on the PDF content"
-    assert data["request_id"] == "test-request-id"
-
-
-@pytest.mark.asyncio
-@patch("app.routes.rag_with_pdf.process_new_pdf")
-async def test_rag_with_pdf_empty_extraction(
-    mock_process_new_pdf,
-    client: AsyncClient,
-    authenticated_user: dict,
-):
-    """Test RAG with PDF when PDF extraction returns empty."""
-    # Mock process_new_pdf to raise HTTPException for empty extraction
-    mock_process_new_pdf.side_effect = HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Unable to extract content from the uploaded PDF.",
-    )
-
-    pdf_content = b"%PDF-1.4\nfake pdf content"
-    pdf_file = BytesIO(pdf_content)
-    pdf_file.seek(0)
-
-    response = await client.post(
-        "/pdf/get/response",
-        files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?", "model": "ollama"},
+        data={
+            "query": "What is this about?",
+            "model": "openai",
+            "openai_pass": "wrong-password",
+        },
         headers=authenticated_user["headers"],
     )
 
     assert response.status_code == 400
     data = response.json()
     assert "detail" in data
-    assert "extract" in data["detail"].lower() or "content" in data["detail"].lower()
-
-
-@pytest.mark.asyncio
-@patch("app.routes.rag_with_pdf.process_new_pdf")
-async def test_rag_with_pdf_qdrant_error(
-    mock_process_new_pdf,
-    client: AsyncClient,
-    authenticated_user: dict,
-):
-    """Test RAG with PDF when Qdrant connection fails."""
-    # Mock process_new_pdf to raise HTTPException for Qdrant error
-    mock_process_new_pdf.side_effect = HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="Failed to process the PDF. Please try again later.",
-    )
-
-    pdf_content = b"%PDF-1.4\nfake pdf content"
-    pdf_file = BytesIO(pdf_content)
-    pdf_file.seek(0)
-
-    response = await client.post(
-        "/pdf/get/response",
-        files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?", "model": "ollama"},
-        headers=authenticated_user["headers"],
-    )
-
-    assert response.status_code == 500
-    data = response.json()
-    assert "detail" in data
-    assert "failed" in data["detail"].lower()
+    assert "password" in data["detail"].lower() or "incorrect" in data["detail"].lower()
 
 
 @pytest.mark.asyncio
 @patch("app.routes.rag_with_pdf.os.getenv")
-@patch("app.routes.rag_with_pdf.get_rag_cloudmodel_response")
-@patch("app.routes.rag_with_pdf.process_new_pdf")
-async def test_rag_with_pdf_openai_error(
-    mock_process_new_pdf,
-    mock_cloudmodel_response,
+async def test_rag_with_pdf_missing_openai_pass(
     mock_getenv,
     client: AsyncClient,
     authenticated_user: dict,
 ):
-    """Test RAG with PDF when OpenAI API fails."""
-    mock_getenv.return_value = "test-pass"
-    
-    # Mock document
-    mock_doc = MagicMock()
-    mock_doc.page_content = "Sample PDF content"
-    mock_doc.metadata = {"request_id": "test-request-id"}
+    """Test RAG with PDF with missing OpenAI password when model is openai."""
+    mock_getenv.return_value = "correct-password"
 
-    # Mock vectorstore
-    mock_vectorstore = MagicMock()
-    mock_vectorstore.similarity_search.return_value = [mock_doc]
+    pdf_content = b"%PDF-1.4\nfake pdf content"
+    pdf_file = BytesIO(pdf_content)
 
-    # Mock process_new_pdf utility function
-    mock_process_new_pdf.return_value = (
-        mock_vectorstore,
-        "test-request-id",
-        "/tmp/test.pdf",
+    response = await client.post(
+        "/pdf/get/response",
+        files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
+        data={"query": "What is this about?", "model": "openai"},
+        headers=authenticated_user["headers"],
     )
 
-    # Mock cloudmodel response to raise exception
-    mock_cloudmodel_response.side_effect = Exception("OpenAI API error")
+    assert response.status_code == 400
+    data = response.json()
+    assert "detail" in data
+    assert "password" in data["detail"].lower() or "incorrect" in data["detail"].lower()
 
+
+@pytest.mark.asyncio
+@patch("app.routes.rag_with_pdf.enqueue_rag_job")
+async def test_rag_with_pdf_both_pdf_and_past_request_id(
+    mock_enqueue,
+    client: AsyncClient,
+    authenticated_user: dict,
+):
+    """Test RAG with PDF when both PDF and past_request_id are provided."""
     pdf_content = b"%PDF-1.4\nfake pdf content"
     pdf_file = BytesIO(pdf_content)
     pdf_file.seek(0)
@@ -260,7 +150,178 @@ async def test_rag_with_pdf_openai_error(
     response = await client.post(
         "/pdf/get/response",
         files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?", "model": "openai", "openai_pass": "test-pass"},
+        data={
+            "query": "What is this about?",
+            "model": "ollama",
+            "past_request_id": "some-id",
+        },
+        headers=authenticated_user["headers"],
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert "detail" in data
+    assert "both" in data["detail"].lower() or "cannot" in data["detail"].lower()
+    mock_enqueue.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("app.routes.rag_with_pdf.Path.mkdir")
+@patch("app.routes.rag_with_pdf.enqueue_rag_job")
+async def test_rag_with_pdf_success_with_pdf(
+    mock_enqueue,
+    _mock_mkdir,
+    client: AsyncClient,
+    authenticated_user: dict,
+):
+    """Test successful RAG job enqueue with PDF file."""
+    mock_enqueue.return_value = "test-job-id-123"
+
+    pdf_content = b"%PDF-1.4\nfake pdf content"
+    pdf_file = BytesIO(pdf_content)
+    pdf_file.seek(0)
+
+    with patch("app.routes.rag_with_pdf.tempfile.NamedTemporaryFile") as mock_temp:
+        mock_temp.return_value.__enter__.return_value.name = "/tmp/test.pdf"
+
+        response = await client.post(
+            "/pdf/get/response",
+            files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
+            data={"query": "What is this about?", "model": "ollama"},
+            headers=authenticated_user["headers"],
+        )
+
+    assert response.status_code == 202
+    data = response.json()
+    assert "message_id" in data
+    assert data["message_id"] == "test-job-id-123"
+    assert data["status"] == "queued"
+    mock_enqueue.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("app.routes.rag_with_pdf.enqueue_rag_job")
+async def test_rag_with_pdf_success_with_past_request_id(
+    mock_enqueue,
+    client: AsyncClient,
+    authenticated_user: dict,
+):
+    """Test successful RAG job enqueue with past_request_id."""
+    mock_enqueue.return_value = "test-job-id-456"
+
+    response = await client.post(
+        "/pdf/get/response",
+        data={
+            "query": "What is this about?",
+            "model": "ollama",
+            "past_request_id": "existing-request-id",
+        },
+        headers=authenticated_user["headers"],
+    )
+
+    assert response.status_code == 202
+    data = response.json()
+    assert "message_id" in data
+    assert data["message_id"] == "test-job-id-456"
+    assert data["status"] == "queued"
+    mock_enqueue.assert_called_once()
+
+    # Verify job data includes past_request_id
+    call_args = mock_enqueue.call_args[0][0]
+    assert call_args["past_request_id"] == "existing-request-id"
+    assert "pdf_file_path" not in call_args
+
+
+@pytest.mark.asyncio
+@patch("app.routes.rag_with_pdf.os.getenv")
+@patch("app.routes.rag_with_pdf.Path.mkdir")
+@patch("app.routes.rag_with_pdf.enqueue_rag_job")
+async def test_rag_with_pdf_success_with_openai(
+    mock_enqueue,
+    _mock_mkdir,
+    mock_getenv,
+    client: AsyncClient,
+    authenticated_user: dict,
+):
+    """Test successful RAG job enqueue with OpenAI model."""
+    mock_getenv.return_value = "test-pass"
+    mock_enqueue.return_value = "test-job-id-789"
+
+    pdf_content = b"%PDF-1.4\nfake pdf content"
+    pdf_file = BytesIO(pdf_content)
+    pdf_file.seek(0)
+
+    with patch("app.routes.rag_with_pdf.tempfile.NamedTemporaryFile") as mock_temp:
+        mock_temp.return_value.__enter__.return_value.name = "/tmp/test.pdf"
+
+        response = await client.post(
+            "/pdf/get/response",
+            files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
+            data={
+                "query": "What is this about?",
+                "model": "openai",
+                "openai_pass": "test-pass",
+            },
+            headers=authenticated_user["headers"],
+        )
+
+    assert response.status_code == 202
+    data = response.json()
+    assert data["message_id"] == "test-job-id-789"
+    mock_enqueue.assert_called_once()
+
+    # Verify job data includes model and openai_pass
+    call_args = mock_enqueue.call_args[0][0]
+    assert call_args["model"] == "openai"
+    assert call_args["openai_pass"] == "test-pass"
+
+
+@pytest.mark.asyncio
+@patch("app.routes.rag_with_pdf.Path.mkdir")
+@patch("app.routes.rag_with_pdf.enqueue_rag_job")
+async def test_rag_with_pdf_empty_file(
+    mock_enqueue,
+    _mock_mkdir,
+    client: AsyncClient,
+    authenticated_user: dict,
+):
+    """Test RAG with PDF using empty file."""
+    empty_file = BytesIO(b"")
+
+    with patch("app.routes.rag_with_pdf.tempfile.NamedTemporaryFile") as mock_temp:
+        mock_temp.return_value.__enter__.return_value.name = "/tmp/empty.pdf"
+
+        response = await client.post(
+            "/pdf/get/response",
+            files={"pdf": ("empty.pdf", empty_file, "application/pdf")},
+            data={"query": "What is this about?", "model": "ollama"},
+            headers=authenticated_user["headers"],
+        )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert "detail" in data
+    assert "empty" in data["detail"].lower()
+    mock_enqueue.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("app.routes.rag_with_pdf.enqueue_rag_job")
+async def test_rag_with_pdf_enqueue_failure(
+    mock_enqueue,
+    client: AsyncClient,
+    authenticated_user: dict,
+):
+    """Test RAG with PDF when enqueue fails."""
+    mock_enqueue.side_effect = Exception("Redis connection failed")
+
+    response = await client.post(
+        "/pdf/get/response",
+        data={
+            "query": "What is this about?",
+            "model": "ollama",
+            "past_request_id": "existing-request-id",
+        },
         headers=authenticated_user["headers"],
     )
 
@@ -305,335 +366,103 @@ async def test_rag_with_pdf_unverified_user(
     assert "verified" in data["detail"].lower()
 
 
-@pytest.mark.asyncio
-@patch("app.routes.rag_with_pdf.os.getenv")
-@patch("app.routes.rag_with_pdf.get_rag_cloudmodel_response")
-@patch("app.routes.rag_with_pdf.process_new_pdf")
-async def test_rag_with_pdf_model_selection_openai(
-    mock_process_new_pdf,
-    mock_cloudmodel_response,
-    mock_getenv,
-    client: AsyncClient,
-    authenticated_user: dict,
-):
-    """Test that OpenAI model is selected when model='openai'."""
-    mock_getenv.return_value = "test-pass"
-    
-    # Mock document
-    mock_doc = MagicMock()
-    mock_doc.page_content = "Sample PDF content"
-    mock_doc.metadata = {"request_id": "test-request-id"}
-
-    # Mock vectorstore
-    mock_vectorstore = MagicMock()
-    mock_vectorstore.similarity_search.return_value = [mock_doc]
-
-    # Mock process_new_pdf utility function
-    mock_process_new_pdf.return_value = (
-        mock_vectorstore,
-        "test-request-id",
-        "/tmp/test.pdf",
-    )
-
-    mock_cloudmodel_response.return_value = "OpenAI response"
-
-    pdf_content = b"%PDF-1.4\nfake pdf content"
-    pdf_file = BytesIO(pdf_content)
-    pdf_file.seek(0)
-
-    response = await client.post(
-        "/pdf/get/response",
-        files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?", "model": "openai", "openai_pass": "test-pass"},
-        headers=authenticated_user["headers"],
-    )
-
-    assert response.status_code == 200
-    mock_cloudmodel_response.assert_called_once()
-    # Verify it was called with query, context, and model
-    call_args = mock_cloudmodel_response.call_args
-    assert call_args[0][0] == "What is this about?"  # query
-    assert call_args[0][2] == "openai"  # model
-    data = response.json()
-    assert data["content"] == "OpenAI response"
-    assert data["request_id"] == "test-request-id"
+# Tests for the job status endpoint
 
 
 @pytest.mark.asyncio
-@patch("app.routes.rag_with_pdf.get_rag_ollama_response")
-@patch("app.routes.rag_with_pdf.process_new_pdf")
-async def test_rag_with_pdf_model_selection_ollama(
-    mock_process_new_pdf,
-    mock_ollama_response,
+@patch("app.routes.rag_with_pdf.get_job_status")
+async def test_get_job_status_pending(
+    mock_get_status,
     client: AsyncClient,
     authenticated_user: dict,
 ):
-    """Test that Ollama model is selected when model='ollama'."""
-    # Mock document
-    mock_doc = MagicMock()
-    mock_doc.page_content = "Sample PDF content"
-    mock_doc.metadata = {"request_id": "test-request-id"}
+    """Test getting job status when job is pending."""
+    mock_get_status.return_value = {"status": "pending"}
 
-    # Mock vectorstore
-    mock_vectorstore = MagicMock()
-    mock_vectorstore.similarity_search.return_value = [mock_doc]
-
-    # Mock process_new_pdf utility function
-    mock_process_new_pdf.return_value = (
-        mock_vectorstore,
-        "test-request-id",
-        "/tmp/test.pdf",
-    )
-
-    # Mock async function
-    async def async_mock(*_args, **_kwargs):
-        return "Ollama response"
-
-    mock_ollama_response.side_effect = async_mock
-
-    pdf_content = b"%PDF-1.4\nfake pdf content"
-    pdf_file = BytesIO(pdf_content)
-    pdf_file.seek(0)
-
-    response = await client.post(
-        "/pdf/get/response",
-        files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?", "model": "ollama"},
-        headers=authenticated_user["headers"],
-    )
-
-    assert response.status_code == 200
-    mock_ollama_response.assert_called_once()
-    data = response.json()
-    assert data["content"] == "Ollama response"
-    assert data["request_id"] == "test-request-id"
-
-
-@pytest.mark.asyncio
-@patch("app.routes.rag_with_pdf.os.getenv")
-@patch("app.routes.rag_with_pdf.get_rag_cloudmodel_response")
-@patch("app.routes.rag_with_pdf.load_existing_vectorstore")
-async def test_rag_with_pdf_past_request_id(
-    mock_load_existing_vectorstore,
-    mock_cloudmodel_response,
-    mock_getenv,
-    client: AsyncClient,
-    authenticated_user: dict,
-):
-    """Test RAG with PDF using past_request_id."""
-    mock_getenv.return_value = "test-pass"
-    
-    # Mock document
-    mock_doc = MagicMock()
-    mock_doc.page_content = "Sample PDF content from past request"
-    mock_doc.metadata = {"request_id": "past-request-id"}
-
-    # Mock vectorstore
-    mock_vectorstore = MagicMock()
-    mock_vectorstore.similarity_search.return_value = [mock_doc]
-
-    # Mock load_existing_vectorstore utility function
-    mock_load_existing_vectorstore.return_value = (
-        mock_vectorstore,
-        "past-request-id",
-    )
-
-    mock_cloudmodel_response.return_value = "Response from past PDF"
-
-    response = await client.post(
-        "/pdf/get/response",
-        data={
-            "query": "What is this about?",
-            "model": "openai",
-            "past_request_id": "past-request-id",
-            "openai_pass": "test-pass",
-        },
+    response = await client.get(
+        "/job/test-job-id",
         headers=authenticated_user["headers"],
     )
 
     assert response.status_code == 200
     data = response.json()
-    assert "content" in data
-    assert "request_id" in data
-    assert data["content"] == "Response from past PDF"
-    assert data["request_id"] == "past-request-id"
-    mock_load_existing_vectorstore.assert_called_once()
+    assert data["status"] == "pending"
 
 
 @pytest.mark.asyncio
-@patch("app.routes.rag_with_pdf.os.getenv")
-@patch("app.routes.rag_with_pdf.load_existing_vectorstore")
-async def test_rag_with_pdf_past_request_id_not_found(
-    mock_load_existing_vectorstore,
-    mock_getenv,
+@patch("app.routes.rag_with_pdf.get_job_status")
+async def test_get_job_status_finished(
+    mock_get_status,
     client: AsyncClient,
     authenticated_user: dict,
 ):
-    """Test RAG with PDF when past_request_id is not found."""
-    mock_getenv.return_value = "test-pass"
-
-    # Mock load_existing_vectorstore to raise HTTPException
-    mock_load_existing_vectorstore.side_effect = HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Request ID 'invalid-id' not found or you don't have access to it.",
-    )
-
-    response = await client.post(
-        "/pdf/get/response",
-        data={
-            "query": "What is this about?",
-            "model": "openai",
-            "past_request_id": "invalid-id",
-            "openai_pass": "test-pass",
+    """Test getting job status when job is finished."""
+    mock_get_status.return_value = {
+        "status": "finished",
+        "result": {
+            "content": "This is the answer from the PDF.",
+            "request_id": "req-123",
         },
+    }
+
+    response = await client.get(
+        "/job/test-job-id",
         headers=authenticated_user["headers"],
     )
 
-    assert response.status_code == 404
+    assert response.status_code == 200
     data = response.json()
-    assert "detail" in data
-    assert "not found" in data["detail"].lower()
+    assert data["content"] == "This is the answer from the PDF."
+    assert data["request_id"] == "req-123"
 
 
 @pytest.mark.asyncio
-@patch("app.routes.rag_with_pdf.os.getenv")
-@patch("app.routes.rag_with_pdf.load_existing_vectorstore")
-async def test_rag_with_pdf_both_pdf_and_past_request_id(
-    mock_load_existing_vectorstore,
-    mock_getenv,
+@patch("app.routes.rag_with_pdf.get_job_status")
+async def test_get_job_status_failed(
+    mock_get_status,
     client: AsyncClient,
     authenticated_user: dict,
 ):
-    """Test RAG with PDF when both PDF and past_request_id are provided."""
-    mock_getenv.return_value = "test-pass"
-    
-    # Mock vectorstore to avoid 404
-    mock_vectorstore = MagicMock()
-    mock_load_existing_vectorstore.return_value = (mock_vectorstore, "some-id")
+    """Test getting job status when job has failed."""
+    mock_get_status.return_value = {
+        "status": "failed",
+        "error": "PDF processing failed",
+    }
 
-    pdf_content = b"%PDF-1.4\nfake pdf content"
-    pdf_file = BytesIO(pdf_content)
-    pdf_file.seek(0)
-
-    response = await client.post(
-        "/pdf/get/response",
-        files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={
-            "query": "What is this about?",
-            "model": "openai",
-            "past_request_id": "some-id",
-            "openai_pass": "test-pass",
-        },
+    response = await client.get(
+        "/job/test-job-id",
         headers=authenticated_user["headers"],
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 200
     data = response.json()
-    assert "detail" in data
-    assert "both" in data["detail"].lower() or "cannot" in data["detail"].lower()
+    assert data["status"] == "failed"
+    assert data["error"] == "PDF processing failed"
 
 
 @pytest.mark.asyncio
-async def test_rag_with_pdf_invalid_model(
-    client: AsyncClient, authenticated_user: dict
-):
-    """Test RAG with PDF with invalid model parameter."""
-    pdf_content = b"%PDF-1.4\nfake pdf content"
-    pdf_file = BytesIO(pdf_content)
-
-    response = await client.post(
-        "/pdf/get/response",
-        files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?", "model": "invalid-model"},
-        headers=authenticated_user["headers"],
-    )
-
-    assert response.status_code == 400
-    data = response.json()
-    assert "detail" in data
-    assert "invalid" in data["detail"].lower() or "model" in data["detail"].lower()
-
-
-@pytest.mark.asyncio
-@patch("app.routes.rag_with_pdf.os.getenv")
-async def test_rag_with_pdf_incorrect_openai_pass(
-    mock_getenv,
+@patch("app.routes.rag_with_pdf.get_job_status")
+async def test_get_job_status_error(
+    mock_get_status,
     client: AsyncClient,
     authenticated_user: dict,
 ):
-    """Test RAG with PDF with incorrect OpenAI password."""
-    mock_getenv.return_value = "correct-password"
-    
-    pdf_content = b"%PDF-1.4\nfake pdf content"
-    pdf_file = BytesIO(pdf_content)
+    """Test getting job status when an error occurs."""
+    mock_get_status.side_effect = Exception("Redis connection failed")
 
-    response = await client.post(
-        "/pdf/get/response",
-        files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?", "model": "openai", "openai_pass": "wrong-password"},
+    response = await client.get(
+        "/job/test-job-id",
         headers=authenticated_user["headers"],
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 500
     data = response.json()
     assert "detail" in data
-    assert "password" in data["detail"].lower() or "incorrect" in data["detail"].lower()
+    assert "failed" in data["detail"].lower()
 
 
 @pytest.mark.asyncio
-@patch("app.routes.rag_with_pdf.os.getenv")
-async def test_rag_with_pdf_missing_openai_pass(
-    mock_getenv,
-    client: AsyncClient,
-    authenticated_user: dict,
-):
-    """Test RAG with PDF with missing OpenAI password when model is openai."""
-    mock_getenv.return_value = "correct-password"
-    
-    pdf_content = b"%PDF-1.4\nfake pdf content"
-    pdf_file = BytesIO(pdf_content)
-
-    response = await client.post(
-        "/pdf/get/response",
-        files={"pdf": ("test.pdf", pdf_file, "application/pdf")},
-        data={"query": "What is this about?", "model": "openai"},
-        headers=authenticated_user["headers"],
-    )
-
-    assert response.status_code == 400
-    data = response.json()
-    assert "detail" in data
-    assert "password" in data["detail"].lower() or "incorrect" in data["detail"].lower()
-
-
-@pytest.mark.asyncio
-@patch("app.routes.rag_with_pdf.process_new_pdf")
-async def test_rag_with_pdf_httpexception_logging(
-    mock_process_new_pdf,
-    client: AsyncClient,
-    authenticated_user: dict,
-):
-    """Test that HTTPException errors are properly handled."""
-    # Mock process_new_pdf to raise HTTPException
-    mock_process_new_pdf.side_effect = HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="The uploaded PDF file is empty.",
-    )
-
-    empty_file = BytesIO(b"")
-    empty_file.seek(0)
-
-    response = await client.post(
-        "/pdf/get/response",
-        files={"pdf": ("empty.pdf", empty_file, "application/pdf")},
-        data={"query": "What is this about?", "model": "ollama"},
-        headers=authenticated_user["headers"],
-    )
-
-    # Verify 400 status code is returned
-    assert response.status_code == 400
-    
-    # Verify error detail is preserved
-    data = response.json()
-    assert "detail" in data
-    assert "empty" in data["detail"].lower()
+async def test_get_job_status_unauthorized(client: AsyncClient):
+    """Test getting job status without authentication."""
+    response = await client.get("/job/test-job-id")
+    assert response.status_code == 403
