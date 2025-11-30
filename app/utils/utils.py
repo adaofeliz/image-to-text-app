@@ -101,7 +101,7 @@ def validate_sound_file(file: UploadFile) -> bool:
         ".aac",
         ".flac",
         ".wma",
-        ".mp4"
+        ".mp4",
     }
 
     # Allowed MIME types
@@ -109,18 +109,18 @@ def validate_sound_file(file: UploadFile) -> bool:
         "audio/mpeg",
         "audio/wav",
         "audio/ogg",
-        "audio/m4a",
         "audio/aac",
         "audio/flac",
         "audio/wma",
         "audio/mp4",
         "audio/mp3",
     }
-    
+
     # Check file extension
     if file.filename:
         file_extension = Path(file.filename).suffix.lower()
         logger.info("file_extension: %s", file_extension)
+        logger.info("file_content_type: %s", file.content_type)
         if file_extension not in allowed_extensions:
             logger.warning(
                 "Invalid file extension: %s for file: %s", file_extension, file.filename
