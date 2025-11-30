@@ -3,7 +3,7 @@ FROM python:3.11-slim
 # set workdir
 WORKDIR /app
 
-# install build dependencies and system libraries for OpenCV/PaddleOCR
+# install build dependencies and system libraries for OpenCV/PaddleOCR and audio processing
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     git \
@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libxrender-dev \
     libgomp1 \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PyTorch first (from PyTorch index for better reliability)

@@ -114,6 +114,7 @@ def validate_sound_file(file: UploadFile) -> bool:
         "audio/wma",
         "audio/mp4",
         "audio/mp3",
+        "audio/x-m4a",
     }
 
     # Check file extension

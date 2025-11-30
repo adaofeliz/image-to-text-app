@@ -1,3 +1,7 @@
+import os
+import tempfile
+from pathlib import Path
+
 import librosa
 import numpy as np
 from fastapi import HTTPException, UploadFile
@@ -44,12 +48,20 @@ def convert_sound_to_text(file: UploadFile) -> str:
     """
     Converts audio to text using the Whisper model.
     """
+    temp_file_path = None
     try:
         # Lazy load model and processor
         processor, model, device = _load_model()
 
-        # Load audio and resample to 16 kHz
-        audio_np, sr = librosa.load(file.file, sr=16000)
+        # Save uploaded file to temp file (required for formats like M4A that need ffmpeg)
+        suffix = Path(file.filename).suffix if file.filename else ".wav"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+            content = file.file.read()
+            tmp_file.write(content)
+            temp_file_path = tmp_file.name
+
+        # Load audio from file path and resample to 16 kHz
+        audio_np, sr = librosa.load(temp_file_path, sr=16000)
         logger.info("Loaded audio with sample rate %d", sr)
 
         # Split into chunks
@@ -81,3 +93,10 @@ def convert_sound_to_text(file: UploadFile) -> str:
         return transcription.strip()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        # Clean up temp file
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+            except Exception:
+                pass
