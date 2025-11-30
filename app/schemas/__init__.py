@@ -7,7 +7,12 @@ from app.schemas.auth_schemas import (
     UserLogin,
     UserRegister,
 )
-from app.schemas.schemas import ResponseItem
+from app.schemas.schemas import (
+    RAGJobQueuedResponse,
+    RAGJobStatusFailed,
+    RAGJobStatusPending,
+    ResponseItem,
+)
 
 __all__ = [
     "MessageResponse",
@@ -16,4 +21,7 @@ __all__ = [
     "UserLogin",
     "UserRegister",
     "ResponseItem",
+    "RAGJobQueuedResponse",
+    "RAGJobStatusPending",
+    "RAGJobStatusFailed",
 ]
