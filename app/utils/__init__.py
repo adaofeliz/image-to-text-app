@@ -18,7 +18,6 @@ from app.utils.file_utils import delete_temp_file
 from app.utils.rag_ollama_response import get_rag_ollama_response
 from app.utils.rag_cloudmodel_response import get_rag_cloudmodel_response
 from app.utils.constants import models_supported, model_names
-from app.utils.convert_sound_to_text import convert_sound_to_text
 
 __all__ = [
     "create_access_token",
@@ -36,5 +35,4 @@ __all__ = [
     "get_rag_cloudmodel_response",
     "models_supported",
     "model_names",
-    "convert_sound_to_text",
 ]

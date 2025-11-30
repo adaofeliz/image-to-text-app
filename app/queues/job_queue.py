@@ -8,9 +8,11 @@ import dramatiq
 import redis
 
 from app.database.redis import get_redis_broker, get_result_backend, get_redis_url
-from app.queues.rag_worker import process_rag_job_async
-from app.queues.sound_worker import process_sound_job_sync
-from app.queues.image_worker import process_image_job_sync
+from app.workers import (
+    process_rag_job_async,
+    process_sound_job_sync,
+    process_image_job_sync,
+)
 from app.utils.logger import logger
 
 
