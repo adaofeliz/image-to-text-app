@@ -81,7 +81,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
-      - shared_pdfs:/app/shared_pdfs
+      - shared_pdfs:/app/shared_files
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
     depends_on:
@@ -103,7 +103,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
-      - shared_pdfs:/app/shared_pdfs
+      - shared_pdfs:/app/shared_files
     command: dramatiq app.queues.job_queue --processes 1 --threads 2
     restart: unless-stopped
     depends_on:

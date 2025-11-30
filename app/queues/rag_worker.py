@@ -15,6 +15,7 @@ from fastapi import UploadFile
 
 from app.database import get_database_url
 from app.utils import (
+    delete_temp_file,
     get_rag_cloudmodel_response,
     get_rag_ollama_response,
     models_supported,
@@ -155,13 +156,4 @@ async def process_rag_job_async(job_data: Dict[str, Any]) -> Dict[str, Any]:
             }
 
         finally:
-            # Clean up temporary files
-            if tmp_file_path and Path(tmp_file_path).exists():
-                try:
-                    Path(tmp_file_path).unlink(missing_ok=True)
-                except Exception as cleanup_exc:
-                    logger.warning(
-                        "Unable to remove temporary file %s: %s",
-                        tmp_file_path,
-                        cleanup_exc,
-                    )
+            delete_temp_file(tmp_file_path)

@@ -18,6 +18,7 @@ from sqlalchemy import select
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from app.database import PDFRequest
+from app.utils.file_utils import delete_temp_file
 from app.utils.logger import logger
 
 QDRANT_URL = os.getenv("QDRANT_URL")
@@ -177,20 +178,10 @@ async def process_new_pdf(
         return vectorstore, current_request_id, tmp_file_path or ""
 
     except HTTPException:
-        # Clean up temp file on error
-        if tmp_file_path:
-            try:
-                Path(tmp_file_path).unlink(missing_ok=True)
-            except Exception:
-                pass
+        delete_temp_file(tmp_file_path, silent=True)
         raise
     except Exception as exc:
-        # Clean up temp file on error
-        if tmp_file_path:
-            try:
-                Path(tmp_file_path).unlink(missing_ok=True)
-            except Exception:
-                pass
+        delete_temp_file(tmp_file_path, silent=True)
         logger.error("Failed to process PDF: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

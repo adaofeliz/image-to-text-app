@@ -1,7 +1,8 @@
 """Tests for image to text conversion routes."""
 
 from io import BytesIO
-from unittest.mock import MagicMock, patch
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
@@ -44,35 +45,6 @@ async def test_convert_image_invalid_file_type(
 
 
 @pytest.mark.asyncio
-@patch("app.routes.image_to_text.logger")
-async def test_convert_image_httpexception_logging(
-    mock_logger, client: AsyncClient, authenticated_user: dict
-):
-    """Test that HTTPException errors are logged and return 400 status code."""
-    text_file = BytesIO(b"This is not an image")
-
-    response = await client.post(
-        "/convert/image/text",
-        files={"image": ("test.txt", text_file, "text/plain")},
-        headers=authenticated_user["headers"],
-    )
-    
-    # Verify 400 status code is returned
-    assert response.status_code == 400
-    
-    # Verify error logging was called
-    mock_logger.error.assert_called_once()
-    error_call_args = mock_logger.error.call_args[0]
-    assert "HTTP error" in error_call_args[0]
-    assert "Status:" in error_call_args[0]
-    
-    # Verify error detail is preserved in response
-    data = response.json()
-    assert "detail" in data
-    assert "invalid" in data["detail"].lower()
-
-
-@pytest.mark.asyncio
 async def test_convert_image_invalid_mime_type(
     client: AsyncClient, authenticated_user: dict
 ):
@@ -105,112 +77,65 @@ async def test_convert_image_missing_file(
 
 
 @pytest.mark.asyncio
-@patch("app.routes.image_to_text.PaddleOCR")
-async def test_convert_image_success(
-    mock_paddleocr, client: AsyncClient, authenticated_user: dict
+async def test_convert_image_job_queued(
+    client: AsyncClient, authenticated_user: dict, tmp_path: Path
 ):
-    """Test successful image to text conversion."""
-    mock_ocr_instance = MagicMock()
-    mock_ocr_instance.predict.return_value = [{"rec_texts": ["Hello", "World", "Test"]}]
-    mock_paddleocr.return_value = mock_ocr_instance
+    """Test successful image-to-text job queueing."""
+    with patch("app.routes.image_to_text.enqueue_image_job") as mock_enqueue, \
+         patch("app.routes.image_to_text.SHARED_IMAGE_DIR", tmp_path):
+        mock_enqueue.return_value = "test-job-id-123"
 
-    img = Image.new("RGB", (100, 100), color="red")
-    img_bytes = BytesIO()
-    img.save(img_bytes, format="PNG")
-    img_bytes.seek(0)
+        img = Image.new("RGB", (100, 100), color="red")
+        img_bytes = BytesIO()
+        img.save(img_bytes, format="PNG")
+        img_bytes.seek(0)
 
-    response = await client.post(
-        "/convert/image/text",
-        files={"image": ("test.png", img_bytes, "image/png")},
-        headers=authenticated_user["headers"],
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "message" in data
-    assert isinstance(data["message"], str)
-    message = data["message"]
-    assert "Hello" in message or "World" in message or "Test" in message
+        response = await client.post(
+            "/convert/image/text",
+            files={"image": ("test.png", img_bytes, "image/png")},
+            headers=authenticated_user["headers"],
+        )
+        assert response.status_code == 202
+        data = response.json()
+        assert data["message_id"] == "test-job-id-123"
+        assert data["status"] == "queued"
+        assert "message" in data
 
-
-@pytest.mark.asyncio
-@patch("app.routes.image_to_text.PaddleOCR")
-async def test_convert_image_empty_result(
-    mock_paddleocr, client: AsyncClient, authenticated_user: dict
-):
-    """Test image conversion with empty OCR result."""
-    mock_ocr_instance = MagicMock()
-    mock_ocr_instance.predict.return_value = [{"rec_texts": []}]
-    mock_paddleocr.return_value = mock_ocr_instance
-
-    img = Image.new("RGB", (100, 100), color="red")
-    img_bytes = BytesIO()
-    img.save(img_bytes, format="PNG")
-    img_bytes.seek(0)
-
-    response = await client.post(
-        "/convert/image/text",
-        files={"image": ("test.png", img_bytes, "image/png")},
-        headers=authenticated_user["headers"],
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "message" in data
-    assert data["message"] == "" or len(data["message"]) == 0
-
-
-@pytest.mark.asyncio
-@patch("app.routes.image_to_text.PaddleOCR")
-async def test_convert_image_ocr_error(
-    mock_paddleocr, client: AsyncClient, authenticated_user: dict
-):
-    """Test image conversion when OCR fails."""
-    mock_ocr_instance = MagicMock()
-    mock_ocr_instance.predict.side_effect = Exception("OCR processing failed")
-    mock_paddleocr.return_value = mock_ocr_instance
-
-    img = Image.new("RGB", (100, 100), color="red")
-    img_bytes = BytesIO()
-    img.save(img_bytes, format="PNG")
-    img_bytes.seek(0)
-
-    response = await client.post(
-        "/convert/image/text",
-        files={"image": ("test.png", img_bytes, "image/png")},
-        headers=authenticated_user["headers"],
-    )
-    assert response.status_code == 500
-    data = response.json()
-    assert "detail" in data
-    assert "failed" in data["detail"].lower()
+        # Verify enqueue was called
+        mock_enqueue.assert_called_once()
+        call_args = mock_enqueue.call_args[0][0]
+        assert "image_file_path" in call_args
+        assert call_args["filename"] == "test.png"
 
 
 @pytest.mark.asyncio
 async def test_convert_image_different_formats(
-    client: AsyncClient, authenticated_user: dict
+    client: AsyncClient, authenticated_user: dict, tmp_path: Path
 ):
-    """Test image conversion with different image formats."""
+    """Test image queueing with different image formats."""
     formats = [
         ("PNG", "image/png"),
         ("JPEG", "image/jpeg"),
     ]
 
     for format_name, mime_type in formats:
-        img = Image.new("RGB", (100, 100), color="red")
-        img_bytes = BytesIO()
-        img.save(img_bytes, format=format_name)
-        img_bytes.seek(0)
+        with patch("app.routes.image_to_text.enqueue_image_job") as mock_enqueue, \
+             patch("app.routes.image_to_text.SHARED_IMAGE_DIR", tmp_path):
+            mock_enqueue.return_value = "test-job-id-456"
 
-        with patch("app.routes.image_to_text.PaddleOCR") as mock_paddleocr:
-            mock_ocr_instance = MagicMock()
-            mock_ocr_instance.predict.return_value = [{"rec_texts": ["Test"]}]
-            mock_paddleocr.return_value = mock_ocr_instance
+            img = Image.new("RGB", (100, 100), color="red")
+            img_bytes = BytesIO()
+            img.save(img_bytes, format=format_name)
+            img_bytes.seek(0)
 
             response = await client.post(
                 "/convert/image/text",
                 files={"image": (f"test.{format_name.lower()}", img_bytes, mime_type)},
                 headers=authenticated_user["headers"],
             )
-            assert response.status_code in [200, 400]
+            assert response.status_code == 202
+            data = response.json()
+            assert data["status"] == "queued"
 
 
 @pytest.mark.asyncio
@@ -250,27 +175,46 @@ async def test_convert_image_unverified_user(
 
 
 @pytest.mark.asyncio
-@patch("app.routes.image_to_text.PaddleOCR")
-async def test_convert_image_large_result(
-    mock_paddleocr, client: AsyncClient, authenticated_user: dict
+async def test_convert_image_enqueue_error(
+    client: AsyncClient, authenticated_user: dict, tmp_path: Path
 ):
-    """Test image conversion with large OCR result."""
-    large_text = ["Word"] * 100
-    mock_ocr_instance = MagicMock()
-    mock_ocr_instance.predict.return_value = [{"rec_texts": large_text}]
-    mock_paddleocr.return_value = mock_ocr_instance
+    """Test image conversion when enqueueing fails."""
+    with patch("app.routes.image_to_text.enqueue_image_job") as mock_enqueue, \
+         patch("app.routes.image_to_text.SHARED_IMAGE_DIR", tmp_path):
+        mock_enqueue.side_effect = Exception("Queue service unavailable")
 
-    img = Image.new("RGB", (100, 100), color="red")
-    img_bytes = BytesIO()
-    img.save(img_bytes, format="PNG")
-    img_bytes.seek(0)
+        img = Image.new("RGB", (100, 100), color="red")
+        img_bytes = BytesIO()
+        img.save(img_bytes, format="PNG")
+        img_bytes.seek(0)
 
-    response = await client.post(
-        "/convert/image/text",
-        files={"image": ("test.png", img_bytes, "image/png")},
-        headers=authenticated_user["headers"],
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "message" in data
-    assert len(data["message"]) > 0
+        response = await client.post(
+            "/convert/image/text",
+            files={"image": ("test.png", img_bytes, "image/png")},
+            headers=authenticated_user["headers"],
+        )
+        assert response.status_code == 500
+        data = response.json()
+        assert "detail" in data
+        assert "enqueue" in data["detail"].lower() or "failed" in data["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_convert_image_empty_file(
+    client: AsyncClient, authenticated_user: dict, tmp_path: Path
+):
+    """Test image conversion with empty file content."""
+    with patch("app.routes.image_to_text.enqueue_image_job") as mock_enqueue, \
+         patch("app.routes.image_to_text.SHARED_IMAGE_DIR", tmp_path):
+        empty_bytes = BytesIO(b"")
+
+        response = await client.post(
+            "/convert/image/text",
+            files={"image": ("test.png", empty_bytes, "image/png")},
+            headers=authenticated_user["headers"],
+        )
+        # Should fail validation or return 400
+        assert response.status_code in [400, 422]
+
+        # Enqueue should not be called for empty files
+        mock_enqueue.assert_not_called()

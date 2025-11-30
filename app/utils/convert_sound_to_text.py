@@ -1,4 +1,3 @@
-import os
 import tempfile
 from pathlib import Path
 
@@ -6,6 +5,7 @@ import librosa
 import numpy as np
 from fastapi import HTTPException, UploadFile
 
+from app.utils.file_utils import delete_temp_file
 from app.utils.logger import logger
 
 
@@ -94,9 +94,4 @@ def convert_sound_to_text(file: UploadFile) -> str:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
-        # Clean up temp file
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.unlink(temp_file_path)
-            except Exception:
-                pass
+        delete_temp_file(temp_file_path, silent=True)

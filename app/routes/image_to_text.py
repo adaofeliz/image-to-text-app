@@ -3,108 +3,100 @@
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
-from paddleocr import PaddleOCR
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.dependencies import get_current_active_user
 from app.database import User
-from app.schemas import ResponseItem
-from app.utils import (
-    convert_numpy_to_python,
-    convert_result_to_text,
-    extract_rec_texts,
-    validate_image_file,
-)
+from app.schemas import JobQueuedResponse
+from app.queues import enqueue_image_job
+from app.utils import validate_image_file, delete_temp_file
 from app.utils.logger import logger
 
 
 router = APIRouter()
 
+# Shared directory for image files
+SHARED_IMAGE_DIR = Path("/app/shared_files")
 
-@router.post("/convert/image/text", response_model=ResponseItem, status_code=200)
+
+@router.post(
+    "/convert/image/text",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=JobQueuedResponse,
+)
 async def convert_image_to_text(
     image: UploadFile = File(...),
     _current_user: User = Depends(get_current_active_user),
-):
-    """Convert uploaded image to text using OCR.
+) -> JobQueuedResponse:
+    """Queue an image-to-text conversion job.
 
-    Requires authentication with a valid access token.
-    The _current_user dependency ensures the user is authenticated and verified.
+    Returns a job ID that can be used to check the status via GET /job/{message_id}.
     """
+    logger.info(
+        "Image-to-text request from user: %s (ID: %s) - File: %s",
+        _current_user.email,
+        _current_user.id,
+        image.filename,
+    )
+
+    # Validate that the uploaded file is an image
     try:
-        logger.info(
-            "Image to text conversion request from user: %s (ID: %s) - File: %s",
-            _current_user.email,
-            _current_user.id,
-            image.filename,
-        )
-
-        # Validate that the uploaded file is an image
         validate_image_file(image)
-
-        ocr = PaddleOCR(
-            text_detection_model_name="PP-OCRv5_server_det",
-            text_recognition_model_name="PP-OCRv5_server_rec",
-            use_doc_orientation_classify=False,
-            use_doc_unwarping=False,
-            use_textline_orientation=False,
-        )
-
-        # Save uploaded file temporarily
-        # Handle case where filename might be None
-        suffix = Path(image.filename).suffix if image.filename else ""
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
-            content = await image.read()
-            tmp_file.write(content)
-            tmp_file_path = tmp_file.name
-
-        try:
-            # Run OCR prediction on the uploaded image
-            logger.debug("Running OCR on file: %s", tmp_file_path)
-            result = ocr.predict(tmp_file_path)
-
-            # Extract only rec_texts from the result
-            rec_texts = extract_rec_texts(result)
-
-            # Convert numpy arrays to Python native types for JSON serialization
-            serializable_texts = convert_numpy_to_python(rec_texts)
-            text_result = convert_result_to_text(serializable_texts)
-
-            logger.info(
-                "OCR conversion successful for user: %s - Extracted %d text segments",
-                _current_user.email,
-                len(rec_texts),
-            )
-
-            return JSONResponse(
-                status_code=200,
-                content={"message": text_result},
-            )
-        finally:
-            # Clean up temporary file
-            Path(tmp_file_path).unlink(missing_ok=True)
     except HTTPException as http_exc:
         logger.error(
-            "HTTP error in image to text conversion for user %s (ID: %s) - File: %s - Status: %s - Detail: %s",
+            "Invalid image file from user %s: %s - %s",
             _current_user.email,
-            _current_user.id,
             image.filename,
-            http_exc.status_code,
             http_exc.detail,
         )
-        raise HTTPException(
-            status_code=400,
-            detail=http_exc.detail,
-        ) from http_exc
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.error(
-            "Image to text conversion error for user %s: %s",
+        raise
+
+    image_file_path: str | None = None
+    try:
+        # Save image to shared volume for worker access
+        SHARED_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+        suffix = Path(image.filename).suffix if image.filename else ".png"
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=suffix, dir=str(SHARED_IMAGE_DIR)
+        ) as tmp_file:
+            content = await image.read()
+            if not content:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="The uploaded image file is empty.",
+                )
+            tmp_file.write(content)
+            image_file_path = tmp_file.name
+
+        # Enqueue the job
+        job_data = {
+            "image_file_path": image_file_path,
+            "filename": image.filename or "image.png",
+            "user_id": str(_current_user.id),
+        }
+        job_id = enqueue_image_job(job_data)
+
+        logger.info(
+            "Image-to-text job enqueued for user %s (ID: %s) - Job ID: %s",
             _current_user.email,
-            exc,
-            exc_info=True,
+            _current_user.id,
+            job_id,
         )
+
+        return JobQueuedResponse(
+            message_id=job_id,
+            status="queued",
+            message="Job has been queued for processing. Use GET /job/{message_id} to check status.",
+        )
+
+    except HTTPException:
+        delete_temp_file(image_file_path, silent=True)
+        raise
+    except Exception as exc:
+        logger.error("Failed to enqueue image-to-text job: %s", exc, exc_info=True)
+        delete_temp_file(image_file_path, silent=True)
         raise HTTPException(
-            status_code=500,
-            detail="Image conversion failed",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to enqueue the job. Please try again later.",
         ) from exc

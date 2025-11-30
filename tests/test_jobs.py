@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 from httpx import AsyncClient
 
-from app.queues import JOB_TYPE_RAG, JOB_TYPE_SOUND
+from app.queues import JOB_TYPE_RAG, JOB_TYPE_SOUND, JOB_TYPE_IMAGE
 
 
 @pytest.mark.asyncio
@@ -86,6 +86,36 @@ async def test_get_job_status_sound_finished(
     data = response.json()
     assert data["content"] == "This is the transcribed text."
     assert data["filename"] == "test.wav"
+
+
+@pytest.mark.asyncio
+@patch("app.routes.jobs.get_job_status")
+async def test_get_job_status_image_finished(
+    mock_get_status,
+    client: AsyncClient,
+    authenticated_user: dict,
+):
+    """Test getting image job status when job is finished."""
+    mock_get_status.return_value = {
+        "status": "finished",
+        "job_type": JOB_TYPE_IMAGE,
+        "result": {
+            "content": "Extracted text from image",
+            "filename": "test.png",
+            "segments_count": 5,
+        },
+    }
+
+    response = await client.get(
+        "/job/test-job-id",
+        headers=authenticated_user["headers"],
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["content"] == "Extracted text from image"
+    assert data["filename"] == "test.png"
+    assert data["segments_count"] == 5
 
 
 @pytest.mark.asyncio

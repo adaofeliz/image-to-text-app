@@ -8,12 +8,10 @@ from app.schemas.auth_schemas import (
     UserRegister,
 )
 from app.schemas.schemas import (
+    ImageJobResult,
     JobQueuedResponse,
     JobStatusFailed,
     JobStatusPending,
-    RAGJobQueuedResponse,
-    RAGJobStatusFailed,
-    RAGJobStatusPending,
     ResponseItem,
     SoundJobResult,
 )
@@ -28,8 +26,6 @@ __all__ = [
     "JobQueuedResponse",
     "JobStatusPending",
     "JobStatusFailed",
-    "RAGJobQueuedResponse",
-    "RAGJobStatusPending",
-    "RAGJobStatusFailed",
     "SoundJobResult",
+    "ImageJobResult",
 ]

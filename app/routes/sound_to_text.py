@@ -9,13 +9,14 @@ from app.database import User
 from app.dependencies.dependencies import get_current_active_user
 from app.schemas import JobQueuedResponse
 from app.queues import enqueue_sound_job
+from app.utils import delete_temp_file
 from app.utils.logger import logger
 from app.utils.utils import validate_sound_file
 
 router = APIRouter()
 
 # Shared directory for audio files (same as PDFs)
-SHARED_AUDIO_DIR = Path("/app/shared_pdfs")
+SHARED_AUDIO_DIR = Path("/app/shared_files")
 
 
 @router.post(
@@ -86,21 +87,11 @@ async def transcribe_sound_to_text(
         )
 
     except HTTPException:
-        # Clean up temp file on validation errors
-        if audio_file_path and Path(audio_file_path).exists():
-            try:
-                Path(audio_file_path).unlink(missing_ok=True)
-            except Exception:
-                pass
+        delete_temp_file(audio_file_path, silent=True)
         raise
     except Exception as exc:
         logger.error("Failed to enqueue sound-to-text job: %s", exc, exc_info=True)
-        # Clean up temp file if created
-        if audio_file_path and Path(audio_file_path).exists():
-            try:
-                Path(audio_file_path).unlink(missing_ok=True)
-            except Exception:
-                pass
+        delete_temp_file(audio_file_path, silent=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to enqueue the job. Please try again later.",

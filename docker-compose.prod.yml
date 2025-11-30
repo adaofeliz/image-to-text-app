@@ -73,7 +73,7 @@ services:
       - .env
     volumes:
       - ./logs:/app/logs
-      - shared_pdfs:/app/shared_pdfs
+      - shared_pdfs:/app/shared_files
     restart: unless-stopped
     depends_on:
       postgres:
@@ -93,7 +93,7 @@ services:
       - .env
     volumes:
       - ./logs:/app/logs
-      - shared_pdfs:/app/shared_pdfs
+      - shared_pdfs:/app/shared_files
     command: dramatiq app.queues.job_queue --processes 1 --threads 8
     restart: unless-stopped
     depends_on:

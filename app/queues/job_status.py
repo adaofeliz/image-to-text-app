@@ -9,8 +9,10 @@ from app.queues.job_queue import (
     result_backend,
     process_rag_job,
     process_sound_job,
+    process_image_job,
     JOB_TYPE_RAG,
     JOB_TYPE_SOUND,
+    JOB_TYPE_IMAGE,
     JOB_TYPE_KEY_PREFIX,
 )
 from app.utils.logger import logger
@@ -43,6 +45,8 @@ def get_job_status(message_id: str) -> Dict[str, Any]:
             actor = process_sound_job
         elif job_type == JOB_TYPE_RAG:
             actor = process_rag_job
+        elif job_type == JOB_TYPE_IMAGE:
+            actor = process_image_job
         else:
             raise ValueError(f"Unknown job type: {job_type}")
 

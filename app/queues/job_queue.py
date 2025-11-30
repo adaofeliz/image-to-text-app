@@ -10,6 +10,7 @@ import redis
 from app.database.redis import get_redis_broker, get_result_backend, get_redis_url
 from app.queues.rag_worker import process_rag_job_async
 from app.queues.sound_worker import process_sound_job_sync
+from app.queues.image_worker import process_image_job_sync
 from app.utils.logger import logger
 
 
@@ -31,6 +32,7 @@ def _get_redis_client() -> redis.Redis:
 # Job type constants
 JOB_TYPE_RAG = "rag"
 JOB_TYPE_SOUND = "sound"
+JOB_TYPE_IMAGE = "image"
 JOB_TYPE_KEY_PREFIX = "job:type:"
 JOB_TYPE_TTL = 86400 * int(os.getenv("JOB_TYPE_TTL_DAYS", "7"))
 
@@ -95,4 +97,30 @@ def enqueue_sound_job(job_data: Dict[str, Any]) -> str:
     message = process_sound_job.send(job_data)
     _store_job_type(message.message_id, JOB_TYPE_SOUND)
     logger.info("Enqueued sound-to-text job with message ID: %s", message.message_id)
+    return message.message_id
+
+
+# =============================================================================
+# Image-to-Text Processing
+# =============================================================================
+
+
+@dramatiq.actor(store_results=True, max_retries=3, time_limit=300000)
+def process_image_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Process an image-to-text job using Dramatiq."""
+    try:
+        logger.info("Starting image-to-text job processing")
+        result = process_image_job_sync(job_data)
+        logger.info("Image-to-text job completed successfully")
+        return result
+    except Exception as e:
+        logger.error("Error processing image-to-text job: %s", e, exc_info=True)
+        raise
+
+
+def enqueue_image_job(job_data: Dict[str, Any]) -> str:
+    """Enqueue an image-to-text processing job."""
+    message = process_image_job.send(job_data)
+    _store_job_type(message.message_id, JOB_TYPE_IMAGE)
+    logger.info("Enqueued image-to-text job with message ID: %s", message.message_id)
     return message.message_id

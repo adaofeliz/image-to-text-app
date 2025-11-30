@@ -18,7 +18,7 @@ from fastapi import (
 from app.database import User
 from app.dependencies import get_current_active_user
 from app.schemas import JobQueuedResponse
-from app.utils import models_supported
+from app.utils import models_supported, delete_temp_file
 from app.queues import enqueue_rag_job
 from app.utils.logger import logger
 
@@ -87,7 +87,7 @@ async def rag_with_pdf(
         pdf_file_path: str | None = None
         if pdf:
             # Save PDF to shared volume (accessible by both web and worker containers)
-            shared_pdf_dir = Path("/app/shared_pdfs")
+            shared_pdf_dir = Path("/app/shared_files")
             shared_pdf_dir.mkdir(parents=True, exist_ok=True)
 
             suffix = Path(pdf.filename).suffix if pdf.filename else ".pdf"
@@ -127,12 +127,7 @@ async def rag_with_pdf(
         raise
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Failed to enqueue RAG job: %s", exc, exc_info=True)
-        # Clean up temp file if created
-        if pdf_file_path and Path(pdf_file_path).exists():
-            try:
-                Path(pdf_file_path).unlink(missing_ok=True)
-            except Exception:
-                pass
+        delete_temp_file(pdf_file_path, silent=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to enqueue the job. Please try again later.",

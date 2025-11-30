@@ -1,12 +1,12 @@
 """Worker functions for processing sound-to-text jobs."""
 
-import os
 from pathlib import Path
 from typing import Dict, Any
 
 import librosa
 import numpy as np
 
+from app.utils import delete_temp_file
 from app.utils.logger import logger
 
 
@@ -106,10 +106,4 @@ def process_sound_job_sync(job_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.error("Error processing sound-to-text job: %s", e, exc_info=True)
         raise
     finally:
-        # Clean up temp file
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.unlink(temp_file_path)
-                logger.info("Cleaned up temp file: %s", temp_file_path)
-            except Exception as cleanup_exc:
-                logger.warning("Failed to clean up temp file: %s", cleanup_exc)
+        delete_temp_file(temp_file_path)

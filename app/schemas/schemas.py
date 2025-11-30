@@ -11,11 +11,6 @@ class ResponseItem(BaseModel):
     request_id: Optional[str] = None
 
 
-# =============================================================================
-# Generic Job Queue Schemas (shared by RAG and Sound jobs)
-# =============================================================================
-
-
 class JobQueuedResponse(BaseModel):
     """Response schema when a job is successfully queued."""
 
@@ -50,19 +45,18 @@ class JobStatusFailed(BaseModel):
     error: str = Field(..., description="Error message")
 
 
-# Aliases for backward compatibility
-RAGJobQueuedResponse = JobQueuedResponse
-RAGJobStatusPending = JobStatusPending
-RAGJobStatusFailed = JobStatusFailed
-
-
-# =============================================================================
-# Sound-to-Text Response Schemas
-# =============================================================================
-
-
 class SoundJobResult(BaseModel):
     """Response schema for completed sound-to-text job result."""
 
     content: str = Field(..., description="Transcribed text")
     filename: Optional[str] = Field(None, description="Original filename")
+
+
+class ImageJobResult(BaseModel):
+    """Response schema for completed image-to-text job result."""
+
+    content: str = Field(..., description="Extracted text from image")
+    filename: Optional[str] = Field(None, description="Original filename")
+    segments_count: Optional[int] = Field(
+        None, description="Number of text segments extracted"
+    )

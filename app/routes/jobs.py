@@ -5,12 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.database import User
 from app.dependencies.dependencies import get_current_active_user
 from app.schemas import (
+    ImageJobResult,
     JobStatusFailed,
     JobStatusPending,
     ResponseItem,
     SoundJobResult,
 )
-from app.queues import get_job_status, JOB_TYPE_RAG, JOB_TYPE_SOUND
+from app.queues import get_job_status, JOB_TYPE_RAG, JOB_TYPE_SOUND, JOB_TYPE_IMAGE
 from app.utils.logger import logger
 
 router = APIRouter()
@@ -19,12 +20,18 @@ router = APIRouter()
 @router.get(
     "/job/{message_id}",
     status_code=status.HTTP_200_OK,
-    response_model=ResponseItem | SoundJobResult | JobStatusPending | JobStatusFailed,
+    response_model=ResponseItem
+    | SoundJobResult
+    | ImageJobResult
+    | JobStatusPending
+    | JobStatusFailed,
 )
 def get_job_status_endpoint(
     message_id: str,
     _current_user: User = Depends(get_current_active_user),
-) -> ResponseItem | SoundJobResult | JobStatusPending | JobStatusFailed:
+) -> (
+    ResponseItem | SoundJobResult | ImageJobResult | JobStatusPending | JobStatusFailed
+):
     """Get the status of any background job.
 
     Returns the job status and result if completed.
@@ -47,6 +54,12 @@ def get_job_status_endpoint(
                 return ResponseItem(
                     content=result.get("content", ""),
                     request_id=result.get("request_id"),
+                )
+            elif job_type == JOB_TYPE_IMAGE:
+                return ImageJobResult(
+                    content=result.get("content", ""),
+                    filename=result.get("filename"),
+                    segments_count=result.get("segments_count"),
                 )
             else:
                 raise ValueError(f"Unknown job type: {job_type}")
