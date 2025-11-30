@@ -17,8 +17,8 @@ LOG_DIR_STR = os.getenv("LOG_DIR", "logs")
 # Determine the base directory for logs
 # Use the project root (parent of app directory) as the base, or current working directory as fallback
 _this_file = Path(__file__).resolve()
-_app_dir = _this_file.parent.parent  # Go up from app/utils/logger.py to app/
-_project_root = _app_dir.parent  # Go up from app/ to project root
+_app_dir = _this_file.parent.parent
+_project_root = _app_dir.parent
 
 # Resolve to absolute path to ensure consistent location
 # If absolute path provided, use it; otherwise make it relative to project root
@@ -63,7 +63,7 @@ logger.addHandler(console_handler)
 if LOG_DIR and LOG_FILE:
     try:
         file_handler = RotatingFileHandler(
-            str(LOG_FILE),  # Convert Path to string for compatibility
+            str(LOG_FILE),
             maxBytes=10 * 1024 * 1024,  # 10MB
             backupCount=5,
             encoding="utf-8",
@@ -93,7 +93,10 @@ if LOG_DIR and ERROR_LOG_FILE:
         error_file_handler.setFormatter(file_format)
         logger.addHandler(error_file_handler)
     except (OSError, IOError) as e:
-        print(f"Warning: Could not create error log file {ERROR_LOG_FILE}: {e}", file=sys.stderr)
+        print(
+            f"Warning: Could not create error log file {ERROR_LOG_FILE}: {e}",
+            file=sys.stderr,
+        )
 
 # Set levels for third-party loggers
 logging.getLogger("uvicorn").setLevel(logging.INFO)

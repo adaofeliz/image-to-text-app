@@ -15,6 +15,9 @@ from app.middleware.logging_middleware import LoggingMiddleware
 from app.routes import router as api_router
 from app.utils.logger import logger
 
+# Import queues module to register Dramatiq actors
+import app.queues.rag_queue  # type: ignore  # noqa: F401
+
 
 load_dotenv()
 
@@ -56,7 +59,7 @@ app.include_router(api_router)
 
 
 @app.exception_handler(404)
-async def not_found_handler(request: Request, _exc: HTTPException):
+def not_found_handler(request: Request, _exc: HTTPException):
     """Handle 404 errors by serving the default error page."""
     logger.warning("404 Not Found: %s %s", request.method, request.url.path)
     error_page_path = Path(__file__).parent / "templates" / "NotFound.html"
@@ -70,7 +73,7 @@ async def not_found_handler(request: Request, _exc: HTTPException):
 
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
+def global_exception_handler(request: Request, exc: Exception):
     """Handle all unhandled exceptions."""
     logger.error(
         "Unhandled exception: %s %s - %s",

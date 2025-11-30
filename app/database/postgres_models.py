@@ -4,7 +4,7 @@ import uuid
 from sqlalchemy import Boolean, Column, DateTime, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 
-from app.database.database import Base  # noqa: F401
+from app.database.postgres import Base  # noqa: F401
 
 
 class User(Base):
@@ -61,3 +61,4 @@ class PDFRequest(Base):
         server_default=text("CURRENT_TIMESTAMP"),
         nullable=False,
     )
+

@@ -24,7 +24,8 @@ services:
     environment:
       QDRANT__STORAGE__STORAGE_PATH: /qdrant/storage
     healthcheck:
-      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/127.0.0.1/6333' || exit 1"]
+      test:
+        ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/127.0.0.1/6333' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -51,6 +52,18 @@ services:
       retries: 5
       start_period: 30s
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   web:
     build: .
     container_name: image-to-text-app-web
@@ -61,6 +74,7 @@ services:
     volumes:
       - ./pull.sh:/app/pull.sh
       - ./logs:/app/logs
+      - shared_pdfs:/app/shared_pdfs
     restart: unless-stopped
     depends_on:
       postgres:
@@ -69,9 +83,33 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  worker:
+    build: .
+    container_name: image-to-text-app-worker
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+      - shared_pdfs:/app/shared_pdfs
+    command: dramatiq app.queues.rag_queue --processes 1 --threads 4
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   postgres_data:
   qdrant_data:
   ollama_data:
+  redis_data:
+  shared_pdfs:

@@ -1,12 +1,12 @@
 """Tests for sound to text conversion routes."""
 
 from io import BytesIO
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
 
-from app.database.models import User
+from app.database import User
 from app.utils import create_access_token, get_password_hash
 
 
@@ -15,7 +15,7 @@ async def test_convert_sound_unauthorized(client: AsyncClient):
     """Test sound conversion without authentication."""
     # Create a mock audio file (WAV format)
     audio_bytes = BytesIO(b"fake audio content")
-    
+
     response = await client.post(
         "/convert/sound/text", files={"file": ("test.wav", audio_bytes, "audio/wav")}
     )
@@ -102,7 +102,7 @@ async def test_convert_sound_conversion_error(
 ):
     """Test sound conversion when conversion fails."""
     from fastapi import HTTPException
-    
+
     mock_convert_sound.side_effect = HTTPException(
         status_code=500, detail="Audio processing failed"
     )
@@ -179,7 +179,7 @@ async def test_convert_sound_different_formats(
 ):
     """Test sound conversion with different audio formats."""
     mock_convert_sound.return_value = "Transcribed text"
-    
+
     formats = [
         ("wav", "audio/wav"),
         ("mp3", "audio/mpeg"),
@@ -214,12 +214,16 @@ async def test_convert_sound_logging(
         files={"file": ("test.wav", audio_bytes, "audio/wav")},
         headers=authenticated_user["headers"],
     )
-    
+
     assert response.status_code == 200
     # Verify logging was called
     assert mock_logger.info.called
     # Check that conversion logging was called
     log_calls = [str(call) for call in mock_logger.info.call_args_list]
-    assert any("Converting sound file" in str(call) for call in mock_logger.info.call_args_list)
-    assert any("Converted sound file to text" in str(call) for call in mock_logger.info.call_args_list)
-
+    assert any(
+        "Converting sound file" in str(call) for call in mock_logger.info.call_args_list
+    )
+    assert any(
+        "Converted sound file to text" in str(call)
+        for call in mock_logger.info.call_args_list
+    )

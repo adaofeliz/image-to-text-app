@@ -7,7 +7,7 @@ import pytest
 from httpx import AsyncClient
 from PIL import Image
 
-from app.database.models import User
+from app.database import User
 from app.utils import create_access_token, get_password_hash
 
 

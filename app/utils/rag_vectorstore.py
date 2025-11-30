@@ -1,5 +1,6 @@
 """Utility functions for RAG vectorstore operations."""
 
+import os
 import asyncio
 import tempfile
 import uuid
@@ -16,10 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from app.database.models import PDFRequest
+from app.database import PDFRequest
 from app.utils.logger import logger
 
-QDRANT_URL = "http://qdrant:6333"
+QDRANT_URL = os.getenv("QDRANT_URL")
 
 
 async def load_existing_vectorstore(
@@ -48,7 +49,7 @@ async def load_existing_vectorstore(
         )
     )
     pdf_request = result.scalar_one_or_none()
-    print("\n\npdf_request", pdf_request)
+
     if not pdf_request:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -67,7 +68,6 @@ async def load_existing_vectorstore(
         client=qdrant_client,
     )
 
-    print("\n\nvectorstore", vectorstore)
     return vectorstore, past_request_id
 
 

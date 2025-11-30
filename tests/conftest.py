@@ -12,7 +12,7 @@ from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
 from app.database import get_db
-from app.database.models import Base, User
+from app.database import Base, User
 from app.routes import router as api_router
 from app.utils import get_password_hash
 

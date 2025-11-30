@@ -1,4 +1,4 @@
-"""Database connection and configuration."""
+"""PostgreSQL database connection and configuration."""
 
 import os
 
@@ -21,6 +21,12 @@ POSTGRES_HOST = os.getenv("POSTGRES_HOST")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT")
 
 DATABASE_URL = f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+
+
+def get_database_url() -> str:
+    """Get the PostgreSQL database URL."""
+    return DATABASE_URL
+
 
 engine = create_async_engine(
     DATABASE_URL,
@@ -74,3 +80,4 @@ async def init_db():
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Failed to initialize database tables: %s", exc, exc_info=True)
         raise
+

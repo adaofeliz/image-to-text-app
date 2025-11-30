@@ -161,6 +161,15 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",
             )
+
+        # Check if user has verified their email
+        if not user.is_verified:  # type: ignore[attr-defined]
+            logger.warning("Login failed: Email not verified - %s", credentials.email)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Please verify your email before logging in",
+            )
+
         hashed_password = user.hashed_password
 
         if hashed_password is None:

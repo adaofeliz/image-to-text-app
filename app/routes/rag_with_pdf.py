@@ -1,8 +1,7 @@
 """RAG with PDF route."""
 
 import os
-import asyncio
-import uuid
+import tempfile
 from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
@@ -16,19 +15,11 @@ from fastapi import (
     UploadFile,
     status,
 )
-from langchain_qdrant import QdrantVectorStore
-from qdrant_client.models import Filter, FieldCondition, MatchValue
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.database import User, get_db
+from app.database import User
 from app.dependencies import get_current_active_user
 from app.schemas import ResponseItem
-from app.utils import (
-    get_rag_cloudmodel_response,
-    get_rag_ollama_response,
-    models_supported,
-)
-from app.utils.rag_vectorstore import load_existing_vectorstore, process_new_pdf
+from app.utils import models_supported
+from app.queues import enqueue_rag_job, get_job_status
 from app.utils.logger import logger
 
 router = APIRouter()
@@ -36,18 +27,19 @@ router = APIRouter()
 load_dotenv()
 
 
-@router.post("/pdf/get/response", response_model=ResponseItem, status_code=200)
+@router.post("/pdf/get/response", status_code=status.HTTP_202_ACCEPTED)
 async def rag_with_pdf(
     pdf: UploadFile | None = File(None),
     query: str = Form(...),
     model: str = Form(...),
     past_request_id: Optional[str] = Form(None),
     openai_pass: Optional[str] = Form(None),
-    db: AsyncSession = Depends(get_db),
     _current_user: User = Depends(get_current_active_user),
-) -> ResponseItem:
-    """Process a PDF with a retrieval-augmented generation flow.
+):
+    """Queue a PDF RAG processing job.
+
     Either upload a new PDF or query an existing one using past_request_id.
+    Returns a job ID that can be used to check the status and retrieve results.
     """
     # Validate model first
     if model not in models_supported:
@@ -60,104 +52,115 @@ async def rag_with_pdf(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Incorrect OpenAI password.",
         )
+
     # Handle optional PDF file - check if it has a valid filename
     if pdf and (not pdf.filename or not pdf.filename.strip()):
         pdf = None
 
-    vectorstore: QdrantVectorStore
-    current_request_id: str
-    tmp_file_path: str | None = None
-
-    # If past_request_id is provided, load existing vectorstore
-    if past_request_id:
-        if pdf is not None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot provide both PDF and past_request_id. Use past_request_id to query an existing PDF.",
-            )
-        vectorstore, current_request_id = await load_existing_vectorstore(
-            past_request_id, uuid.UUID(str(_current_user.id)), db
-        )
-    elif pdf is not None:
-        vectorstore, current_request_id, tmp_file_path = await process_new_pdf(
-            pdf, uuid.UUID(str(_current_user.id)), db
-        )
-    else:
+    # Validate that either PDF or past_request_id is provided
+    if not pdf and not past_request_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Either PDF file or request_id must be provided.",
+            detail="Either PDF file or past_request_id must be provided.",
+        )
+
+    if pdf and past_request_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot provide both PDF and past_request_id. Use past_request_id to query an existing PDF.",
         )
 
     try:
-        # Search for relevant documents filtered by request_id
-        filter_condition = Filter(
-            must=[
-                FieldCondition(
-                    key="metadata.request_id",
-                    match=MatchValue(value=current_request_id),
-                )
-            ]
+        job_data = {
+            "query": query,
+            "model": model,
+            "user_id": str(_current_user.id),
+            "past_request_id": past_request_id,
+            "openai_pass": openai_pass,
+        }
+
+        # If PDF is provided, save it to shared volume for worker access
+        pdf_file_path: str | None = None
+        if pdf:
+            # Save PDF to shared volume (accessible by both web and worker containers)
+            shared_pdf_dir = Path("/app/shared_pdfs")
+            shared_pdf_dir.mkdir(parents=True, exist_ok=True)
+
+            suffix = Path(pdf.filename).suffix if pdf.filename else ".pdf"
+            # Use tempfile to generate unique filename, but save to shared dir
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=suffix, dir=str(shared_pdf_dir)
+            ) as tmp_file:
+                content = await pdf.read()
+                if not content:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="The uploaded PDF file is empty.",
+                    )
+                tmp_file.write(content)
+                pdf_file_path = tmp_file.name
+
+            job_data["pdf_file_path"] = pdf_file_path
+            job_data["pdf_filename"] = pdf.filename or "uploaded.pdf"
+
+        # Enqueue the job
+        job_id = enqueue_rag_job(job_data)
+
+        logger.info(
+            "RAG job enqueued for user %s (ID: %s) - Job ID: %s",
+            _current_user.email,
+            _current_user.id,
+            job_id,
         )
-        logger.info("Searching with filter for request_id: %s", current_request_id)
 
-        # First, try without filter to see if documents exist
-        all_results = await asyncio.to_thread(
-            vectorstore.similarity_search,
-            query,
-            k=5,
-        )
-        logger.info("Found %s documents without filter", len(all_results))
+        return {
+            "message_id": job_id,
+            "status": "queued",
+            "message": "Job has been queued for processing. Use the message_id to check status.",
+        }
 
-        if all_results:
-            logger.info(
-                "Sample document metadata: %s",
-                all_results[0].metadata if all_results else "None",
-            )
-
-        # Now search with filter
-        search_results = await asyncio.to_thread(
-            vectorstore.similarity_search,
-            query,
-            k=5,
-            filter=filter_condition,
-        )
-        logger.info("Found %s documents with request_id filter", len(search_results))
-
-        # If filter returns empty but we have documents, try without filter as fallback
-        if not search_results and all_results:
-            logger.warning(
-                "Filter returned no results, using all documents (filter may not be working correctly)"
-            )
-            search_results = all_results
-
-        relevant_context = (
-            "\n\n".join([doc.page_content for doc in search_results])
-            if search_results
-            else ""
-        )
-        # Get response from RAG model using the model specified
-        response: str | None = None
-        if model == models_supported["ollama"]:
-            response = await get_rag_ollama_response(query, relevant_context)
-        else:
-            response = get_rag_cloudmodel_response(query, relevant_context, model)
-
-        return ResponseItem(content=response, request_id=current_request_id)
-
+    except HTTPException:
+        raise
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.error("Failed to process RAG request: %s", exc, exc_info=True)
+        logger.error("Failed to enqueue RAG job: %s", exc, exc_info=True)
+        # Clean up temp file if created
+        if pdf_file_path and Path(pdf_file_path).exists():
+            try:
+                Path(pdf_file_path).unlink(missing_ok=True)
+            except Exception:
+                pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to process the PDF. Please try again later.",
+            detail="Failed to enqueue the job. Please try again later.",
         ) from exc
-    finally:
-        # Clean up temporary files
-        try:
-            if tmp_file_path:
-                Path(tmp_file_path).unlink(missing_ok=True)
-        except Exception as cleanup_exc:  # pylint: disable=broad-exception-caught
-            logger.warning(
-                "Unable to remove temporary file %s: %s",
-                tmp_file_path or "unknown",
-                cleanup_exc,
+
+
+@router.get("/job/{message_id}", status_code=status.HTTP_200_OK)
+def get_rag_job_status(
+    message_id: str,
+    _current_user: User = Depends(get_current_active_user),
+):
+    """Get the status of a RAG PDF processing job.
+
+    Returns the job status and result if completed.
+    """
+    try:
+        status_info = get_job_status(message_id)
+
+        # If job is finished, return result
+        if status_info["status"] == "finished" and status_info.get("result"):
+            result = status_info["result"]
+            return ResponseItem(
+                content=result.get("content", ""),
+                request_id=result.get("request_id"),
             )
+
+        # Otherwise return status information
+        return status_info
+
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error("Failed to get job status: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve job status.",
+        ) from exc

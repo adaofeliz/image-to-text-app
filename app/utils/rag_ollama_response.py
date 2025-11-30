@@ -1,8 +1,9 @@
+import os
 import asyncio
 
 import ollama
 
-client = ollama.Client(host="http://ollama:11434")
+client = ollama.Client(host=os.getenv("OLLAMA_URL"))
 
 
 async def get_rag_ollama_response(query: str, relevant_context: str) -> str:
@@ -22,8 +23,8 @@ async def get_rag_ollama_response(query: str, relevant_context: str) -> str:
             prompt=prompt,
             stream=False,
             options={
-                "temperature": 0.7,  
-                "num_predict": 500,  
+                "temperature": 0.7,
+                "num_predict": 500,
             },
         )
         return str(response["response"])

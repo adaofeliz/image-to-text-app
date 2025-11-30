@@ -11,7 +11,7 @@ router = APIRouter()
 
 
 @router.post("/convert/sound/text", response_model=ResponseItem, status_code=200)
-async def transcribe_sound_to_text(
+def transcribe_sound_to_text(
     file: UploadFile = File(...), _current_user: User = Depends(get_current_active_user)
 ) -> ResponseItem:
     """Convert uploaded sound file to text."""

@@ -56,6 +56,20 @@ services:
       retries: 5
       start_period: 30s
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   web:
     build: .
     image: image-to-text-app:latest
@@ -67,6 +81,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
+      - shared_pdfs:/app/shared_pdfs
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
     depends_on:
@@ -76,8 +91,34 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    image: image-to-text-app:latest
+    container_name: image-to-text-app-worker
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app
+      - ./logs:/app/logs
+      - shared_pdfs:/app/shared_pdfs
+    command: dramatiq app.queues.rag_queue --processes 1 --threads 2
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   postgres_data:
   qdrant_data:
   ollama_data:
+  redis_data:
+  shared_pdfs:
