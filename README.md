@@ -2,6 +2,8 @@
 
 A FastAPI-based REST API service that provides OCR (Optical Character Recognition) for images, RAG (Retrieval-Augmented Generation) for PDF documents, and Speech-to-Text conversion for audio files. Built with PaddleOCR, LangChain, OpenAI Whisper, Qdrant vector search, and asynchronous job processing via Dramatiq and Redis.
 
+🌐 **Live Demo**: [https://kingsley-api.name.ng/docs](https://kingsley-api.name.ng/docs)
+
 ## Features
 
 - 🖼️ **Image to Text Conversion**: Upload images and extract text using advanced OCR
@@ -14,7 +16,6 @@ A FastAPI-based REST API service that provides OCR (Optical Character Recognitio
 - 🐳 **Docker Support**: Fully containerized with Docker and Docker Compose
 - 🔄 **Auto-reload**: Development mode with automatic file watching and reloading
 - 📚 **Interactive API Docs**: Swagger UI documentation at `/docs`
-- ✅ **Health Check**: Monitor API server status at `/health`
 - 🎨 **Custom Error Pages**: Beautiful 404 error page for invalid routes
 - 🔍 **Vector Search**: Qdrant vector database for semantic search and RAG
 
