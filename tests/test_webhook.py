@@ -131,64 +131,60 @@ class TestSendWebhook:
                 assert 30 in sleep_calls
 
     def test_max_retries_exceeded(self):
-        """Give up after 10 retries."""
+        """Give up after 10 retries (11 total attempts)."""
         mock_resp = MagicMock()
         mock_resp.status_code = 500
         call_count = [0]
         lock = threading.Lock()
         done = threading.Event()
-        
+
         def mock_post(*args, **kwargs):
             with lock:
                 call_count[0] += 1
-                if call_count[0] >= 10:
+                if call_count[0] >= 11:
                     done.set()
             return mock_resp
-        
+
         sleep_calls = []
         def track_sleep(duration):
             sleep_calls.append(duration)
-        
+
         with patch('app.utils.webhook.requests.post', side_effect=mock_post):
             with patch('app.utils.webhook.time.sleep', side_effect=track_sleep):
                 send_webhook('http://example.com/hook', {'test': 'data'})
-                # Wait for thread to complete using Event
                 done.wait(timeout=10.0)
-                
-                # 10 attempts total
-                assert call_count[0] == 10
-                # sleep called 9 times (after attempts 1-9, not after attempt 10)
-                assert len(sleep_calls) == 9
+
+                # 11 total attempts (1 initial + 10 retries)
+                assert call_count[0] == 11
+                # sleep called 10 times (after attempts 1-10, not after attempt 11)
+                assert len(sleep_calls) == 10
 
     def test_backoff_increases(self):
-        """Backoff time increases with each retry."""
+        """Backoff time increases linearly: 30s × retry_number."""
         mock_resp = MagicMock()
         mock_resp.status_code = 500
         call_count = [0]
         lock = threading.Lock()
         done = threading.Event()
-        
+
         def mock_post(*args, **kwargs):
             with lock:
                 call_count[0] += 1
-                if call_count[0] >= 10:
+                if call_count[0] >= 11:
                     done.set()
             return mock_resp
-        
+
         sleep_calls = []
         def track_sleep(duration):
             sleep_calls.append(duration)
-        
+
         with patch('app.utils.webhook.requests.post', side_effect=mock_post):
             with patch('app.utils.webhook.time.sleep', side_effect=track_sleep):
                 send_webhook('http://example.com/hook', {'test': 'data'})
-                # Wait for thread to complete using Event
                 done.wait(timeout=10.0)
-                
-                # Check backoff times: 30, 60, 90, ... (9 calls, not 10)
-                webhook_sleeps = sorted(sleep_calls)
-                expected_calls = [30 * i for i in range(1, 10)]
-                assert webhook_sleeps == expected_calls
+
+                # 10 sleeps: 30, 60, 90, ..., 300
+                assert sleep_calls == [30 * i for i in range(1, 11)]
 
     def test_daemon_thread(self):
         """Webhook runs in a daemon thread."""
