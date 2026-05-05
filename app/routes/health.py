@@ -21,6 +21,6 @@ def health_check():
         content={
             "status": "ok",
             "version": __version__,
-            "message": f"{os.getenv('ENVIRONMENT', 'API').capitalize()} API server is up and running!!!! 🚀🚀🚀🚀",
+            "message": f"{os.getenv('ENVIRONMENT', 'API').capitalize()} API server is operational.",
         },
     )
