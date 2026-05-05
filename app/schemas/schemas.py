@@ -1,3 +1,5 @@
+"""Pydantic schemas for API requests and responses."""
+
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -45,13 +47,6 @@ class JobStatusFailed(BaseModel):
     error: str = Field(..., description="Error message")
 
 
-class SoundJobResult(BaseModel):
-    """Response schema for completed sound-to-text job result."""
-
-    content: str = Field(..., description="Transcribed text")
-    filename: Optional[str] = Field(None, description="Original filename")
-
-
 class ImageJobResult(BaseModel):
     """Response schema for completed image-to-text job result."""
 
@@ -60,3 +55,5 @@ class ImageJobResult(BaseModel):
     segments_count: Optional[int] = Field(
         None, description="Number of text segments extracted"
     )
+    email: Optional[str] = Field(None, description="Optional email provided with the request")
+    session_id: Optional[str] = Field(None, description="Optional session ID provided with the request")

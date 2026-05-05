@@ -43,9 +43,9 @@ def get_redis_broker() -> RedisBroker:
         logger.debug("Initializing Redis broker: %s", REDIS_URL)
         _redis_broker = RedisBroker(url=REDIS_URL)
 
-        # Add Results middleware for storing job results
-        result_backend = get_result_backend()
-        _redis_broker.add_middleware(Results(backend=result_backend))
+    # Add Results middleware for storing job results
+    result_backend = get_result_backend()
+    _redis_broker.add_middleware(Results(backend=result_backend))  # type: ignore[union-attr]
 
-        logger.info("Redis broker initialized with Results middleware")
+    logger.info("Redis broker initialized with Results middleware")
     return _redis_broker

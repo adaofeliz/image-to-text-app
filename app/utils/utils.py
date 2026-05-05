@@ -43,7 +43,6 @@ def convert_result_to_text(result):
 def validate_image_file(file: UploadFile) -> None:
     """Validate that the uploaded file is an image."""
 
-    # Allowed image extensions
     allowed_extensions = {
         ".jpg",
         ".jpeg",
@@ -55,7 +54,6 @@ def validate_image_file(file: UploadFile) -> None:
         ".tif",
     }
 
-    # Allowed MIME types
     allowed_mime_types = {
         "image/jpeg",
         "image/jpg",
@@ -66,7 +64,6 @@ def validate_image_file(file: UploadFile) -> None:
         "image/tiff",
     }
 
-    # Check file extension
     if file.filename:
         file_extension = Path(file.filename).suffix.lower()
         if file_extension not in allowed_extensions:
@@ -78,7 +75,6 @@ def validate_image_file(file: UploadFile) -> None:
                 detail="Invalid file type.",
             )
 
-    # Check MIME type
     if file.content_type and file.content_type not in allowed_mime_types:
         logger.warning(
             "Invalid MIME type: %s for file: %s", file.content_type, file.filename
@@ -87,58 +83,3 @@ def validate_image_file(file: UploadFile) -> None:
             status_code=400,
             detail=f"Invalid MIME type. Expected image file, got: {file.content_type}",
         )
-
-
-def validate_sound_file(file: UploadFile) -> bool:
-    """Validate that the uploaded file is a sound."""
-
-    # Allowed sound extensions
-    allowed_extensions = {
-        ".mp3",
-        ".wav",
-        ".ogg",
-        ".m4a",
-        ".aac",
-        ".flac",
-        ".wma",
-        ".mp4",
-    }
-
-    # Allowed MIME types
-    allowed_mime_types = {
-        "audio/mpeg",
-        "audio/wav",
-        "audio/ogg",
-        "audio/aac",
-        "audio/flac",
-        "audio/wma",
-        "audio/mp4",
-        "audio/mp3",
-        "audio/x-m4a",
-    }
-
-    # Check file extension
-    if file.filename:
-        file_extension = Path(file.filename).suffix.lower()
-        logger.info("file_extension: %s", file_extension)
-        logger.info("file_content_type: %s", file.content_type)
-        if file_extension not in allowed_extensions:
-            logger.warning(
-                "Invalid file extension: %s for file: %s", file_extension, file.filename
-            )
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid sound file.",
-            )
-
-    # Check MIME type
-    if file.content_type and file.content_type not in allowed_mime_types:
-        logger.warning(
-            "Invalid MIME type: %s for file: %s", file.content_type, file.filename
-        )
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid sound file.",
-        )
-
-    return True

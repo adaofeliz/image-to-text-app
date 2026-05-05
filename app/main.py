@@ -1,54 +1,24 @@
 """Main FastAPI application entry point."""
 
-import os
-from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
-from app.database import init_db
-from app.middleware.logging_middleware import LoggingMiddleware
 from app.routes import router as api_router
 from app.utils.logger import logger
 
-# Import queues module to register Dramatiq actors
-import app.queues.job_queue  # type: ignore  # noqa: F401
+import app.queues.job_queue  # noqa: F401
 
 
 load_dotenv()
 
-
-APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
-APP_PORT = int(os.getenv("APP_PORT", "8000"))
-DEBUG = os.getenv("APP_DEBUG", "False")
-
-
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    """Lifespan event handler for startup and shutdown events."""
-    try:
-        await init_db()
-        logger.info("Database initialized successfully")
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.error("Failed to initialize database: %s", exc, exc_info=True)
-        raise
-
-    yield
-
-    logger.info("Application shutting down...")
-
-
-app = FastAPI(title="ScanGenAI API", lifespan=lifespan)
-
-# Add logging middleware
-app.add_middleware(LoggingMiddleware)
+app = FastAPI(title="Image-to-Text API")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

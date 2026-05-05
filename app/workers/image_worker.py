@@ -65,11 +65,18 @@ def process_image_job_sync(job_data: Dict[str, Any]) -> Dict[str, Any]:
             len(rec_texts),
         )
 
-        return {
+        result = {
             "content": text_result,
             "filename": filename,
             "segments_count": len(rec_texts),
         }
+
+        if job_data.get("email") is not None:
+            result["email"] = job_data["email"]
+        if job_data.get("session_id") is not None:
+            result["session_id"] = job_data["session_id"]
+
+        return result
     except Exception as e:
         logger.error("Error processing image-to-text job: %s", e, exc_info=True)
         raise

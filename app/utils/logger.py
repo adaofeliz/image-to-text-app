@@ -101,4 +101,3 @@ if LOG_DIR and ERROR_LOG_FILE:
 # Set levels for third-party loggers
 logging.getLogger("uvicorn").setLevel(logging.INFO)
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)

@@ -7,11 +7,7 @@ from dramatiq.results.errors import ResultMissing, ResultTimeout, ResultFailure
 from app.queues.job_queue import (
     _get_redis_client,
     result_backend,
-    process_rag_job,
-    process_sound_job,
     process_image_job,
-    JOB_TYPE_RAG,
-    JOB_TYPE_SOUND,
     JOB_TYPE_IMAGE,
     JOB_TYPE_KEY_PREFIX,
 )
@@ -36,19 +32,13 @@ def get_job_status(message_id: str) -> Dict[str, Any]:
     try:
         logger.info("Checking job status for message_id: %s", message_id)
 
-        # Look up job type
         job_type = _get_job_type(message_id)
         logger.info("Job type for message_id %s: %s", message_id, job_type)
 
-        # Select the appropriate actor based on job type
-        if job_type == JOB_TYPE_SOUND:
-            actor = process_sound_job
-        elif job_type == JOB_TYPE_RAG:
-            actor = process_rag_job
-        elif job_type == JOB_TYPE_IMAGE:
+        if job_type == JOB_TYPE_IMAGE:
             actor = process_image_job
         else:
-            raise ValueError(f"Unknown job type: {job_type}")
+            actor = process_image_job
 
         result = _try_get_result(actor, message_id)
         result["job_type"] = job_type
