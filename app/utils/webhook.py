@@ -8,19 +8,23 @@ import requests
 
 from app.utils.logger import logger
 
+_MAX_RETRIES = 10
+_REQUEST_TIMEOUT = 30
+_BACKOFF_SECONDS = 30
+
 
 def send_webhook(url: str, payload: Dict[str, Any]) -> None:
     """Send webhook notification in a background thread with retry.
 
     Retries on 5xx status codes and network errors with linear backoff:
-    30 seconds * retry_number, up to 10 retries (11 total attempts).
+    _BACKOFF_SECONDS * retry_number, up to _MAX_RETRIES retries.
     Does NOT retry on 4xx client errors or other non-5xx responses.
     """
     def _send():
-        max_retries = 10
-        for attempt in range(1, max_retries + 2):  # 1..11 → 11 attempts = 10 retries
+        for attempt in range(1, _MAX_RETRIES + 2):  # 1..11 → 11 attempts = 10 retries
+            will_retry = attempt <= _MAX_RETRIES
             try:
-                response = requests.post(url, json=payload, timeout=30)
+                response = requests.post(url, json=payload, timeout=_REQUEST_TIMEOUT)
                 if response.status_code == 200:
                     logger.info("Webhook sent successfully to %s", url)
                     return
@@ -31,11 +35,17 @@ def send_webhook(url: str, payload: Dict[str, Any]) -> None:
                     )
                     return
                 elif response.status_code >= 500:
-                    retry_num = attempt  # attempt 1 → retry 1, etc.
-                    logger.warning(
-                        "Webhook to %s returned %d, retrying in %ds (retry %d/%d)",
-                        url, response.status_code, 30 * retry_num, retry_num, max_retries
-                    )
+                    if will_retry:
+                        logger.warning(
+                            "Webhook to %s returned %d, retrying in %ds (retry %d/%d)",
+                            url, response.status_code, _BACKOFF_SECONDS * attempt,
+                            attempt, _MAX_RETRIES
+                        )
+                    else:
+                        logger.error(
+                            "Webhook to %s returned %d on final attempt, giving up",
+                            url, response.status_code
+                        )
                 else:
                     # 1xx / 3xx / other 2xx — treat as unexpected, no retry
                     logger.error(
@@ -44,16 +54,22 @@ def send_webhook(url: str, payload: Dict[str, Any]) -> None:
                     )
                     return
             except requests.exceptions.RequestException as e:
-                retry_num = attempt
-                logger.warning(
-                    "Webhook to %s failed with %s, retrying in %ds (retry %d/%d)",
-                    url, type(e).__name__, 30 * retry_num, retry_num, max_retries
-                )
+                if will_retry:
+                    logger.warning(
+                        "Webhook to %s failed with %s, retrying in %ds (retry %d/%d)",
+                        url, type(e).__name__, _BACKOFF_SECONDS * attempt,
+                        attempt, _MAX_RETRIES
+                    )
+                else:
+                    logger.error(
+                        "Webhook to %s failed with %s on final attempt, giving up",
+                        url, type(e).__name__
+                    )
 
-            if attempt <= max_retries:  # sleep after attempts 1..10, not after attempt 11
-                time.sleep(30 * attempt)
+            if will_retry:
+                time.sleep(_BACKOFF_SECONDS * attempt)
 
-        logger.error("Webhook to %s failed after %d retries", url, max_retries)
-    
+        logger.error("Webhook to %s failed after %d retries", url, _MAX_RETRIES)
+
     thread = threading.Thread(target=_send, daemon=True)
     thread.start()
