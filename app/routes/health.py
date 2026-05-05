@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
 from app.utils.logger import logger
+from app.version import __version__
 
 load_dotenv()
 
@@ -19,6 +20,7 @@ def health_check():
         status_code=200,
         content={
             "status": "ok",
+            "version": __version__,
             "message": f"{os.getenv('ENVIRONMENT', 'API').capitalize()} API server is up and running!!!! 🚀🚀🚀🚀",
         },
     )
