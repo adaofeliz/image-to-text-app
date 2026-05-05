@@ -261,7 +261,37 @@ class TestProcessImageJobWebhook:
                         assert payload['error'] == 'OCR failed'
                         assert payload['result'] is None
 
-    def test_webhook_error_does_not_crash_actor(self):
+    def test_webhook_skipped_when_image_file_not_found(self):
+        """No webhook dispatched when the image file does not exist."""
+        with patch.dict(os.environ, {'WEBHOOK_URL': 'http://example.com/hook'}):
+            with patch(
+                'app.queues.job_queue.process_image_job_sync',
+                side_effect=ValueError("Image file not found: /app/shared_files/tmp123.png"),
+            ):
+                with patch('app.queues.job_queue.send_webhook') as mock_send:
+                    with pytest.raises(ValueError):
+                        process_image_job({'image_file_path': '/app/shared_files/tmp123.png'})
+
+                    time.sleep(0.2)
+                    mock_send.assert_not_called()
+
+    def test_webhook_dispatched_on_other_value_error(self):
+        """Webhook IS dispatched for unrelated ValueError (not a missing file)."""
+        with patch.dict(os.environ, {'WEBHOOK_URL': 'http://example.com/hook'}):
+            with patch(
+                'app.queues.job_queue.process_image_job_sync',
+                side_effect=ValueError("OCR model failed to load"),
+            ):
+                with patch('app.queues.job_queue.send_webhook') as mock_send:
+                    with patch('app.queues.job_queue.CurrentMessage') as mock_msg:
+                        mock_msg.get_current_message.return_value = MagicMock(message_id='err-000')
+                        with pytest.raises(ValueError):
+                            process_image_job({'image_file_path': '/tmp/exists.png'})
+
+                        time.sleep(0.2)
+                        mock_send.assert_called_once()
+                        _, payload = mock_send.call_args[0]
+                        assert payload['status'] == 'failed'
         """Webhook errors are caught and don't crash the actor."""
         with patch.dict(os.environ, {'WEBHOOK_URL': 'http://example.com/hook'}):
             with patch('app.queues.job_queue.process_image_job_sync', return_value={'content': 'hello'}):

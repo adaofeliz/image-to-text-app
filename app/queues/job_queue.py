@@ -48,42 +48,63 @@ def _store_job_type(message_id: str, job_type: str) -> None:
 # =============================================================================
 
 
+def _is_file_not_found_error(exc: Exception) -> bool:
+    if isinstance(exc, FileNotFoundError):
+        return True
+    if isinstance(exc, ValueError):
+        msg = str(exc).lower()
+        return "image file not found" in msg or "not found" in msg and "image" in msg
+    return False
+
+
 @dramatiq.actor(store_results=True, max_retries=3, time_limit=300000)
 def process_image_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
     """Process an image-to-text job using Dramatiq."""
     result = None
     error = None
+    skip_webhook = False
     try:
         logger.info("Starting image-to-text job processing")
+        image_file_path = job_data.get("image_file_path", "")
+        if not image_file_path:
+            skip_webhook = True
+            raise ValueError("Missing image_file_path in job_data")
         result = process_image_job_sync(job_data)
         logger.info("Image-to-text job completed successfully")
         return result
     except Exception as e:
-        logger.error("Error processing image-to-text job: %s", e, exc_info=True)
         error = str(e)
+        if _is_file_not_found_error(e):
+            logger.error("Image file not found, skipping webhook: %s", e)
+            skip_webhook = True
+        else:
+            logger.error("Error processing image-to-text job: %s", e, exc_info=True)
         raise
     finally:
-        webhook_url = os.getenv("WEBHOOK_URL", "").strip()
-        if webhook_url:
-            try:
-                message = CurrentMessage.get_current_message()
-                message_id = message.message_id if message else None
+        if skip_webhook:
+            logger.info("Webhook skipped due to missing/inaccessible image file")
+        else:
+            webhook_url = os.getenv("WEBHOOK_URL", "").strip()
+            if webhook_url:
+                try:
+                    message = CurrentMessage.get_current_message()
+                    message_id = message.message_id if message else None
 
-                payload = {
-                    "message_id": message_id,
-                    "status": "finished" if error is None else "failed",
-                    "result": result if error is None else None,
-                    "error": error,
-                }
-                # Include optional metadata from job_data
-                for key in ("email", "session_id", "filename"):
-                    if key in job_data:
-                        payload[key] = job_data[key]
+                    payload = {
+                        "message_id": message_id,
+                        "status": "finished" if error is None else "failed",
+                        "result": result if error is None else None,
+                        "error": error,
+                    }
+                    # Include optional metadata from job_data
+                    for key in ("email", "session_id", "filename"):
+                        if key in job_data:
+                            payload[key] = job_data[key]
 
-                send_webhook(webhook_url, payload)
-                logger.info("Webhook dispatched to %s for message_id: %s", webhook_url, message_id)
-            except Exception:
-                logger.exception("Failed to dispatch webhook")
+                    send_webhook(webhook_url, payload)
+                    logger.info("Webhook dispatched to %s for message_id: %s", webhook_url, message_id)
+                except Exception:
+                    logger.exception("Failed to dispatch webhook")
 
 
 def enqueue_image_job(job_data: Dict[str, Any]) -> str:
