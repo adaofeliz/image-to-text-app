@@ -10,7 +10,6 @@ from paddleocr import PaddleOCR
 from app.utils import (
     convert_numpy_to_python,
     convert_result_to_text,
-    delete_temp_file,
     extract_rec_texts,
 )
 from app.utils.logger import logger
@@ -59,41 +58,35 @@ def process_image_job_sync(job_data: Dict[str, Any]) -> Dict[str, Any]:
 
     logger.info("Processing image-to-text job for file: %s", filename)
 
-    try:
-        if not Path(image_file_path).exists():
-            raise ValueError(f"Image file not found: {image_file_path}")
+    if not Path(image_file_path).exists():
+        raise ValueError(f"Image file not found: {image_file_path}")
 
-        _cap_image_size(image_file_path)
+    _cap_image_size(image_file_path)
 
-        ocr = _get_ocr()
+    ocr = _get_ocr()
 
-        logger.info("Running OCR on file: %s", image_file_path)
-        result = ocr.predict(image_file_path)
+    logger.info("Running OCR on file: %s", image_file_path)
+    result = ocr.predict(image_file_path)
 
-        rec_texts = extract_rec_texts(result)
-        serializable_texts = convert_numpy_to_python(rec_texts)
-        text_result = convert_result_to_text(serializable_texts)
+    rec_texts = extract_rec_texts(result)
+    serializable_texts = convert_numpy_to_python(rec_texts)
+    text_result = convert_result_to_text(serializable_texts)
 
-        logger.info(
-            "OCR conversion successful - Extracted %d text segments",
-            len(rec_texts),
-        )
+    logger.info(
+        "OCR conversion successful - Extracted %d text segments",
+        len(rec_texts),
+    )
 
-        result = {
-            "content": text_result,
-            "filename": filename,
-            "image_file_path": image_file_path,
-            "segments_count": len(rec_texts),
-        }
+    result = {
+        "content": text_result,
+        "filename": filename,
+        "image_file_path": image_file_path,
+        "segments_count": len(rec_texts),
+    }
 
-        if job_data.get("email") is not None:
-            result["email"] = job_data["email"]
-        if job_data.get("session_id") is not None:
-            result["session_id"] = job_data["session_id"]
+    if job_data.get("email") is not None:
+        result["email"] = job_data["email"]
+    if job_data.get("session_id") is not None:
+        result["session_id"] = job_data["session_id"]
 
-        return result
-    except Exception as e:
-        logger.error("Error processing image-to-text job: %s", e, exc_info=True)
-        raise
-    finally:
-        delete_temp_file(image_file_path)
+    return result
