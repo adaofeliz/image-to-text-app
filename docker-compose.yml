@@ -24,6 +24,8 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      - DASHBOARD_TOKEN=${DASHBOARD_TOKEN:-}
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs

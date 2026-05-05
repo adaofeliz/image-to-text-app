@@ -1,10 +1,13 @@
 """Main FastAPI application entry point."""
 
+from pathlib import Path
+
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.routes import router as api_router
 from app.utils.logger import logger
@@ -25,11 +28,19 @@ app.add_middleware(
 
 app.include_router(api_router)
 
+app.mount("/dashboard", StaticFiles(directory="app/static/dashboard", html=True), name="dashboard")
+
 
 @app.exception_handler(404)
 def not_found_handler(request: Request, _exc: HTTPException):
-    """Handle 404 errors by redirecting to external URL."""
+    """Handle 404 errors by redirecting to external URL or serving SPA index."""
     logger.warning("404 Not Found: %s %s", request.method, request.url.path)
+    
+    if request.url.path.startswith("/dashboard"):
+        index_path = Path("app/static/dashboard/index.html")
+        if index_path.exists():
+            return FileResponse(str(index_path))
+    
     return RedirectResponse(url="https://ash-speed.hetzner.com/10GB.bin")
 
 

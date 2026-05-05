@@ -1,24 +1,38 @@
 {
-  "active_plan": "/Users/hub/Development/adaofeliz/image-to-text-app/.sisyphus/plans/webhook-integration.md",
-  "started_at": "2026-05-05T16:21:39.656Z",
+  "active_plan": "/Users/hub/Development/adaofeliz/image-to-text-app/.sisyphus/plans/admin-dashboard.md",
+  "started_at": "2026-05-05T18:35:00.000Z",
   "session_ids": [
-    "ses_2071e65bfffeZlqQJb3DW8SuCy",
-    "ses_2070bda03ffe5VF2v1BqZUsJ0j",
-    "ses_20707a788ffell2FFOLD9SP5Wt",
-    "ses_20707cd0cffesufBTuihQJSs1u",
-    "ses_20701ef2effeLFru5IiKJGDDsi",
-    "ses_206fb92a2ffeDeJwp33BW2IqTX",
-    "ses_206fc168affeTGQojJ26QmJmYc",
-    "ses_206ecc231ffe8eA74Op0qMw8bG",
-    "ses_206e136fcffeW7eRshzE0EHBHl",
-    "ses_206e11775ffewXdVlN0QhWYNMZ",
-    "ses_206e12be3ffe5y0RUElP4MdSPq",
-    "ses_206ded424ffeT0BRs3TJXuTWnF",
-    "ses_206dc994dffexT3fzmfdek8yWi",
-    "ses_206dafec7ffe2vSTJPg9bf2Y1k",
-    "ses_206d99528ffew2J2eO1lJ1s0c2"
+    "ses_206ee7773ffesZp2nDvGyjO5QF",
+    "ses_206c42c09ffemMj0YcUtYUrohN",
+    "ses_206c3e48cffedypRs2Vn2G6OCG",
+    "ses_206bbfc7fffenh6Q3Q5Gyy4HwE",
+    "ses_206bbfc99ffea3u1zwMbzdJKO7",
+    "ses_206bbe54cffeuyEw2Zaxjq4mHh",
+    "ses_206b92afaffe8jrnsmKzzR4PHi",
+    "ses_206b79e8cffeEthCxbOQ874H47",
+    "ses_206b7b884ffcz2rCDPWysnjZWp",
+    "ses_206b7f0f7ffdfRPga6zul0rl07",
+    "ses_206b7d443ffeOvT3b8o8z036ps",
+    "ses_206b7f0cdffd473q4yShQ8Hoie",
+    "ses_206b7d46dffdB5zkB20eaA7fni",
+    "ses_206acd22cffdDmor46KXgcKhx5",
+    "ses_20684f1d8ffebjBIGzeRk0VQPL",
+    "ses_20684f19bffddcGB5H3AHASHWX",
+    "ses_2067a1867ffevVQz5Pqw6lmX8W",
+    "ses_2067a5596ffeXpqDAlrNp2i4LD",
+    "ses_2067a55deffeSp2Yp7CH5QlY2G",
+    "ses_2067a2fe9ffdPuzJyoPkTSuodR",
+    "ses_2067a3022ffen0vN55UJMJy6DL"
   ],
-  "plan_name": "webhook-integration",
+  "plan_name": "admin-dashboard",
   "agent": "atlas",
-  "task_sessions": {}
+  "task_sessions": {
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "**Plan Compliance Audit** — `oracle`",
+      "session_id": "ses_2067a3022ffen0vN55UJMJy6DL",
+      "updated_at": "2026-05-05T19:07:17.790Z"
+    }
+  }
 }
