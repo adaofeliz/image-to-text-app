@@ -45,6 +45,7 @@ services:
       - .env
     environment:
       - WEBHOOK_URL=${WEBHOOK_URL:-}
+      - DASHBOARD_TOKEN=${DASHBOARD_TOKEN:-}
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
