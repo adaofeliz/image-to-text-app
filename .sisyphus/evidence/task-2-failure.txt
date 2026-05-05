@@ -1,0 +1,12 @@
+TEST: Webhook on failure
+- WEBHOOK_URL set to http://example.com/hook
+- process_image_job_sync raises Exception('OCR failed')
+- Exception propagates (re-raised in except block)
+- finally block executes and sends webhook
+- send_webhook called with:
+  - url = 'http://example.com/hook'
+  - payload.message_id = 'xyz-789'
+  - payload.status = 'failed'
+  - payload.result = None
+  - payload.error = 'OCR failed'
+✓ TEST PASS: Webhook on failure

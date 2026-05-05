@@ -1,0 +1,137 @@
+/opt/homebrew/lib/python3.11/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.3)/charset_normalizer (3.4.5) doesn't match a supported version!
+  warnings.warn(
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-8.4.2, pluggy-1.6.0 -- /opt/homebrew/opt/python@3.11/bin/python3.11
+cachedir: .pytest_cache
+rootdir: /Users/hub/Development/adaofeliz/image-to-text-app
+configfile: pytest.ini
+plugins: anyio-4.12.1, asyncio-0.24.0, cov-6.0.0, langsmith-0.7.13
+asyncio: mode=Mode.AUTO, default_loop_scope=None
+collecting ... collected 12 items
+
+tests/test_webhook.py::TestSendWebhook::test_success_on_first_attempt PASSED [  8%]
+tests/test_webhook.py::TestSendWebhook::test_retry_on_500_then_success FAILED [ 16%]
+tests/test_webhook.py::TestSendWebhook::test_no_retry_on_400 PASSED      [ 25%]
+tests/test_webhook.py::TestSendWebhook::test_retry_on_connection_error FAILED [ 33%]
+tests/test_webhook.py::TestSendWebhook::test_max_retries_exceeded FAILED [ 41%]
+tests/test_webhook.py::TestSendWebhook::test_backoff_increases FAILED    [ 50%]
+tests/test_webhook.py::TestSendWebhook::test_daemon_thread PASSED        [ 58%]
+tests/test_webhook.py::TestProcessImageJobWebhook::test_webhook_dispatched_on_success FAILED [ 66%]
+tests/test_webhook.py::TestProcessImageJobWebhook::test_webhook_silent_skip_without_env FAILED [ 75%]
+tests/test_webhook.py::TestProcessImageJobWebhook::test_webhook_includes_optional_metadata FAILED [ 83%]
+tests/test_webhook.py::TestProcessImageJobWebhook::test_webhook_dispatched_on_failure FAILED [ 91%]
+tests/test_webhook.py::TestProcessImageJobWebhook::test_webhook_error_does_not_crash_actor FAILED [100%]
+
+=================================== FAILURES ===================================
+________________ TestSendWebhook.test_retry_on_500_then_success ________________
+tests/test_webhook.py:69: in test_retry_on_500_then_success
+    assert call_count[0] == 2
+E   assert 1 == 2
+----------------------------- Captured stdout call -----------------------------
+2026-05-05 17:55:37 - app - WARNING - Webhook to http://example.com/hook returned 500, retrying in 30s (attempt 1/10)
+________________ TestSendWebhook.test_retry_on_connection_error ________________
+tests/test_webhook.py:129: in test_retry_on_connection_error
+    assert call_count[0] == 2
+E   assert 1 == 2
+----------------------------- Captured stdout call -----------------------------
+2026-05-05 17:55:37 - app - WARNING - Webhook to http://example.com/hook failed with ConnectionError, retrying in 30s (attempt 1/10)
+__________________ TestSendWebhook.test_max_retries_exceeded ___________________
+tests/test_webhook.py:159: in test_max_retries_exceeded
+    assert call_count[0] == 10
+E   assert 1 == 10
+----------------------------- Captured stdout call -----------------------------
+2026-05-05 17:55:37 - app - WARNING - Webhook to http://example.com/hook returned 500, retrying in 30s (attempt 1/10)
+____________________ TestSendWebhook.test_backoff_increases ____________________
+tests/test_webhook.py:193: in test_backoff_increases
+    assert webhook_sleeps == expected_calls
+E   assert [] == [30, 60, 90, 120, 150, 180, 210, 240, 270]
+E     
+E     Right contains 9 more items, first extra item: 30
+E     
+E     Full diff:
+E     + []
+E     - [
+E     -     30,
+E     -     60,
+E     -     90,
+E     -     120,
+E     -     150,
+E     -     180,
+E     -     210,
+E     -     240,
+E     -     270,
+E     - ]
+----------------------------- Captured stdout call -----------------------------
+2026-05-05 17:55:37 - app - WARNING - Webhook to http://example.com/hook returned 500, retrying in 30s (attempt 1/10)
+________ TestProcessImageJobWebhook.test_webhook_dispatched_on_success _________
+tests/test_webhook.py:305: in test_webhook_dispatched_on_success
+    with patch('app.queues.job_queue.send_webhook') as mock_send:
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1419: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'app.queues.job_queue' from '/Users/hub/Development/adaofeliz/image-to-text-app/app/queues/job_queue.py'> does not have the attribute 'send_webhook'
+_______ TestProcessImageJobWebhook.test_webhook_silent_skip_without_env ________
+tests/test_webhook.py:322: in test_webhook_silent_skip_without_env
+    with patch('app.queues.job_queue.send_webhook') as mock_send:
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1419: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'app.queues.job_queue' from '/Users/hub/Development/adaofeliz/image-to-text-app/app/queues/job_queue.py'> does not have the attribute 'send_webhook'
+______ TestProcessImageJobWebhook.test_webhook_includes_optional_metadata ______
+tests/test_webhook.py:332: in test_webhook_includes_optional_metadata
+    with patch('app.queues.job_queue.send_webhook') as mock_send:
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1419: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'app.queues.job_queue' from '/Users/hub/Development/adaofeliz/image-to-text-app/app/queues/job_queue.py'> does not have the attribute 'send_webhook'
+________ TestProcessImageJobWebhook.test_webhook_dispatched_on_failure _________
+tests/test_webhook.py:352: in test_webhook_dispatched_on_failure
+    with patch('app.queues.job_queue.send_webhook') as mock_send:
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1419: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'app.queues.job_queue' from '/Users/hub/Development/adaofeliz/image-to-text-app/app/queues/job_queue.py'> does not have the attribute 'send_webhook'
+______ TestProcessImageJobWebhook.test_webhook_error_does_not_crash_actor ______
+tests/test_webhook.py:370: in test_webhook_error_does_not_crash_actor
+    with patch('app.queues.job_queue.send_webhook', side_effect=Exception('Webhook failed')):
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1419: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'app.queues.job_queue' from '/Users/hub/Development/adaofeliz/image-to-text-app/app/queues/job_queue.py'> does not have the attribute 'send_webhook'
+=========================== short test summary info ============================
+FAILED tests/test_webhook.py::TestSendWebhook::test_retry_on_500_then_success - assert 1 == 2
+FAILED tests/test_webhook.py::TestSendWebhook::test_retry_on_connection_error - assert 1 == 2
+FAILED tests/test_webhook.py::TestSendWebhook::test_max_retries_exceeded - assert 1 == 10
+FAILED tests/test_webhook.py::TestSendWebhook::test_backoff_increases - assert [] == [30, 60, 90, 120, 150, 180, 210, 240, 270]
+  
+  Right contains 9 more items, first extra item: 30
+  
+  Full diff:
+  + []
+  - [
+  -     30,
+  -     60,
+  -     90,
+  -     120,
+  -     150,
+  -     180,
+  -     210,
+  -     240,
+  -     270,
+  - ]
+FAILED tests/test_webhook.py::TestProcessImageJobWebhook::test_webhook_dispatched_on_success - AttributeError: <module 'app.queues.job_queue' from '/Users/hub/Development/adaofeliz/image-to-text-app/app/queues/job_queue.py'> does not have the attribute 'send_webhook'
+FAILED tests/test_webhook.py::TestProcessImageJobWebhook::test_webhook_silent_skip_without_env - AttributeError: <module 'app.queues.job_queue' from '/Users/hub/Development/adaofeliz/image-to-text-app/app/queues/job_queue.py'> does not have the attribute 'send_webhook'
+FAILED tests/test_webhook.py::TestProcessImageJobWebhook::test_webhook_includes_optional_metadata - AttributeError: <module 'app.queues.job_queue' from '/Users/hub/Development/adaofeliz/image-to-text-app/app/queues/job_queue.py'> does not have the attribute 'send_webhook'
+FAILED tests/test_webhook.py::TestProcessImageJobWebhook::test_webhook_dispatched_on_failure - AttributeError: <module 'app.queues.job_queue' from '/Users/hub/Development/adaofeliz/image-to-text-app/app/queues/job_queue.py'> does not have the attribute 'send_webhook'
+FAILED tests/test_webhook.py::TestProcessImageJobWebhook::test_webhook_error_does_not_crash_actor - AttributeError: <module 'app.queues.job_queue' from '/Users/hub/Development/adaofeliz/image-to-text-app/app/queues/job_queue.py'> does not have the attribute 'send_webhook'
+========================= 9 failed, 3 passed in 0.23s ==========================

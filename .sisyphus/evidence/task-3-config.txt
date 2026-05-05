@@ -1,0 +1,4 @@
+docker-compose.yml:47:      - WEBHOOK_URL=${WEBHOOK_URL:-}
+docker-compose.prod.yml:36:      - WEBHOOK_URL=${WEBHOOK_URL:-}
+.env.example:10:WEBHOOK_URL=
+.env.example:11:WEBHOOK_URL=

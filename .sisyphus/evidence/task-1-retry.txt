@@ -1,0 +1,2 @@
+Webhook to http://example.com/hook returned 500, retrying in 30s (attempt 1/10)
+TEST 2 PASS: Retry on 500 then success

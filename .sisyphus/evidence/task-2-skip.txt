@@ -1,0 +1,5 @@
+TEST: No webhook when env var not set
+- WEBHOOK_URL not set (removed from environment)
+- process_image_job_sync returns {'content': 'hello'}
+- send_webhook NOT called (assert_not_called)
+✓ TEST PASS: Silent skip when no env var

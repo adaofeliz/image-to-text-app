@@ -1,0 +1,25 @@
+TEST 1: Webhook on success
+- WEBHOOK_URL set to http://example.com/hook
+- process_image_job_sync returns {'content': 'hello'}
+- send_webhook called with correct URL and payload
+- payload.message_id = 'abc-123'
+- payload.status = 'finished'
+- payload.result = {'content': 'hello'}
+✓ TEST 1 PASS: Webhook on success
+
+TEST 2: Silent skip when no env var
+- WEBHOOK_URL not set
+- send_webhook NOT called
+✓ TEST 2 PASS: Silent skip when no env var
+
+TEST 3: Webhook on failure
+- WEBHOOK_URL set to http://example.com/hook
+- process_image_job_sync raises Exception('OCR failed')
+- send_webhook called with correct URL and payload
+- payload.message_id = 'xyz-789'
+- payload.status = 'failed'
+- payload.result = None
+- payload.error = 'OCR failed'
+✓ TEST 3 PASS: Webhook on failure
+
+=== ALL TESTS PASSED ===

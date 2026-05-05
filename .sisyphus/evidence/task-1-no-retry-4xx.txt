@@ -1,0 +1,2 @@
+Webhook failed to http://example.com/hook with client error 400 (no retry)
+TEST 3 PASS: No retry on 400
