@@ -5,6 +5,7 @@ from typing import Dict, Any
 
 import dramatiq
 import redis
+from dramatiq.middleware import CurrentMessage
 
 from app.database.redis import get_redis_broker, get_result_backend, get_redis_url
 from app.workers import process_image_job_sync
@@ -30,6 +31,7 @@ JOB_TYPE_KEY_PREFIX = "job:type:"
 JOB_TYPE_TTL = 86400 * int(os.getenv("JOB_TYPE_TTL_DAYS", "7"))
 
 dramatiq.set_broker(redis_broker)
+redis_broker.add_middleware(CurrentMessage())
 
 
 def _store_job_type(message_id: str, job_type: str) -> None:
@@ -48,6 +50,8 @@ def _store_job_type(message_id: str, job_type: str) -> None:
 @dramatiq.actor(store_results=True, max_retries=3, time_limit=300000)
 def process_image_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
     """Process an image-to-text job using Dramatiq."""
+    result = None
+    error = None
     try:
         logger.info("Starting image-to-text job processing")
         result = process_image_job_sync(job_data)
@@ -55,7 +59,31 @@ def process_image_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
         return result
     except Exception as e:
         logger.error("Error processing image-to-text job: %s", e, exc_info=True)
+        error = str(e)
         raise
+    finally:
+        webhook_url = os.getenv("WEBHOOK_URL", "").strip()
+        if webhook_url:
+            try:
+                from app.utils.webhook import send_webhook
+                message = CurrentMessage.get_current_message()
+                message_id = message.message_id if message else None
+
+                payload = {
+                    "message_id": message_id,
+                    "status": "finished" if error is None else "failed",
+                    "result": result if error is None else None,
+                    "error": error,
+                }
+                # Include optional metadata from job_data
+                for key in ("email", "session_id", "filename"):
+                    if key in job_data:
+                        payload[key] = job_data[key]
+
+                send_webhook(webhook_url, payload)
+                logger.info("Webhook dispatched to %s for message_id: %s", webhook_url, message_id)
+            except Exception:
+                logger.exception("Failed to dispatch webhook")
 
 
 def enqueue_image_job(job_data: Dict[str, Any]) -> str:

@@ -32,6 +32,8 @@ services:
     container_name: image-to-text-app-worker
     env_file:
       - .env
+    environment:
+      - WEBHOOK_URL=${WEBHOOK_URL:-}
     volumes:
       - ./logs:/app/logs
       - shared_files:/app/shared_files
