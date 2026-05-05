@@ -1,6 +1,7 @@
 """Pydantic schemas for API requests and responses."""
 
 from app.schemas.schemas import (
+    AdminJobDetail,
     ImageJobResult,
     JobQueuedResponse,
     JobStatusFailed,
@@ -14,4 +15,5 @@ __all__ = [
     "JobStatusPending",
     "JobStatusFailed",
     "ImageJobResult",
+    "AdminJobDetail",
 ]
