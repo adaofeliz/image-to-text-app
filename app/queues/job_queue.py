@@ -10,6 +10,7 @@ from dramatiq.middleware import CurrentMessage
 from app.database.redis import get_redis_broker, get_result_backend, get_redis_url
 from app.workers import process_image_job_sync
 from app.utils.logger import logger
+from app.utils.webhook import send_webhook
 
 
 redis_broker = get_redis_broker()
@@ -65,7 +66,6 @@ def process_image_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
         webhook_url = os.getenv("WEBHOOK_URL", "").strip()
         if webhook_url:
             try:
-                from app.utils.webhook import send_webhook
                 message = CurrentMessage.get_current_message()
                 message_id = message.message_id if message else None
 

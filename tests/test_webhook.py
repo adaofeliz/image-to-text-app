@@ -1,13 +1,14 @@
 """Tests for webhook notification utility."""
 
+import os
 import threading
 import time
-import time as real_time
 from unittest.mock import patch, MagicMock
 
 import pytest
 import requests
 
+from app.queues.job_queue import process_image_job
 from app.utils.webhook import send_webhook
 
 
@@ -20,21 +21,20 @@ class TestSendWebhook:
         mock_resp.status_code = 200
         call_count = [0]
         lock = threading.Lock()
-        
+
         def mock_post(*args, **kwargs):
             with lock:
                 call_count[0] += 1
             return mock_resp
-        
+
         with patch('app.utils.webhook.requests.post', side_effect=mock_post):
             send_webhook('http://example.com/hook', {'test': 'data'})
-            # Wait for thread to complete
             for _ in range(50):
                 with lock:
                     if call_count[0] >= 1:
                         break
                 time.sleep(0.1)
-            
+
             assert call_count[0] == 1
 
     def test_retry_on_500_then_success(self):
@@ -46,7 +46,7 @@ class TestSendWebhook:
         call_count = [0]
         lock = threading.Lock()
         done = threading.Event()
-        
+
         def mock_post(*args, **kwargs):
             with lock:
                 call_count[0] += 1
@@ -55,19 +55,17 @@ class TestSendWebhook:
             if call_count[0] == 1:
                 return mock_fail
             return mock_ok
-        
+
         sleep_calls = []
         def track_sleep(duration):
             sleep_calls.append(duration)
-        
+
         with patch('app.utils.webhook.requests.post', side_effect=mock_post):
             with patch('app.utils.webhook.time.sleep', side_effect=track_sleep):
                 send_webhook('http://example.com/hook', {'test': 'data'})
-                # Wait for thread to complete using Event
                 done.wait(timeout=5.0)
-                
+
                 assert call_count[0] == 2
-                # Only 1 sleep call (30s) since we succeed on second attempt
                 assert len(sleep_calls) == 1
                 assert 30 in sleep_calls
 
@@ -77,26 +75,25 @@ class TestSendWebhook:
         mock_resp.status_code = 400
         call_count = [0]
         lock = threading.Lock()
-        
+
         def mock_post(*args, **kwargs):
             with lock:
                 call_count[0] += 1
             return mock_resp
-        
+
         sleep_calls = []
         def track_sleep(duration):
             sleep_calls.append(duration)
-        
+
         with patch('app.utils.webhook.requests.post', side_effect=mock_post):
             with patch('app.utils.webhook.time.sleep', side_effect=track_sleep):
                 send_webhook('http://example.com/hook', {'test': 'data'})
-                # Wait for thread to complete
                 for _ in range(50):
                     with lock:
                         if call_count[0] >= 1:
                             break
                     time.sleep(0.1)
-                
+
                 assert call_count[0] == 1
                 assert len(sleep_calls) == 0
 
@@ -107,7 +104,7 @@ class TestSendWebhook:
         call_count = [0]
         lock = threading.Lock()
         done = threading.Event()
-        
+
         def mock_post(*args, **kwargs):
             with lock:
                 call_count[0] += 1
@@ -116,17 +113,16 @@ class TestSendWebhook:
             if call_count[0] == 1:
                 raise requests.ConnectionError()
             return mock_ok
-        
+
         sleep_calls = []
         def track_sleep(duration):
             sleep_calls.append(duration)
-        
+
         with patch('app.utils.webhook.requests.post', side_effect=mock_post):
             with patch('app.utils.webhook.time.sleep', side_effect=track_sleep):
                 send_webhook('http://example.com/hook', {'test': 'data'})
-                # Wait for thread to complete using Event
                 done.wait(timeout=5.0)
-                
+
                 assert call_count[0] == 2
                 assert 30 in sleep_calls
 
@@ -191,16 +187,10 @@ class TestSendWebhook:
         with patch('app.utils.webhook.threading.Thread') as mock_thread:
             mock_thread.return_value = MagicMock()
             send_webhook('http://example.com/hook', {'test': 'data'})
-            
+
             assert mock_thread.called
             kwargs = mock_thread.call_args[1]
             assert kwargs.get('daemon') is True
-
-
-import os
-from unittest.mock import patch, MagicMock
-
-from app.queues.job_queue import process_image_job
 
 
 class TestProcessImageJobWebhook:
@@ -210,12 +200,12 @@ class TestProcessImageJobWebhook:
         """Webhook is dispatched when job succeeds."""
         with patch.dict(os.environ, {'WEBHOOK_URL': 'http://example.com/hook'}):
             with patch('app.queues.job_queue.process_image_job_sync', return_value={'content': 'hello'}):
-                with patch('app.utils.webhook.send_webhook') as mock_send:
+                with patch('app.queues.job_queue.send_webhook') as mock_send:
                     with patch('app.queues.job_queue.CurrentMessage') as mock_msg:
                         mock_msg.get_current_message.return_value = MagicMock(message_id='abc-123')
                         process_image_job({'image_file_path': '/tmp/test.png'})
-                        
-                        import time; time.sleep(0.5)
+
+                        time.sleep(0.5)
                         mock_send.assert_called_once()
                         url, payload = mock_send.call_args[0]
                         assert url == 'http://example.com/hook'
@@ -227,17 +217,17 @@ class TestProcessImageJobWebhook:
         """No webhook dispatched when WEBHOOK_URL is not set."""
         with patch.dict(os.environ, {}, clear=True):
             with patch('app.queues.job_queue.process_image_job_sync', return_value={'content': 'hello'}):
-                with patch('app.utils.webhook.send_webhook') as mock_send:
+                with patch('app.queues.job_queue.send_webhook') as mock_send:
                     process_image_job({'image_file_path': '/tmp/test.png'})
-                    
-                    import time; time.sleep(0.5)
+
+                    time.sleep(0.5)
                     mock_send.assert_not_called()
 
     def test_webhook_includes_optional_metadata(self):
         """Webhook payload includes email, session_id, filename when present."""
         with patch.dict(os.environ, {'WEBHOOK_URL': 'http://example.com/hook'}):
             with patch('app.queues.job_queue.process_image_job_sync', return_value={'content': 'hello'}):
-                with patch('app.utils.webhook.send_webhook') as mock_send:
+                with patch('app.queues.job_queue.send_webhook') as mock_send:
                     with patch('app.queues.job_queue.CurrentMessage') as mock_msg:
                         mock_msg.get_current_message.return_value = MagicMock(message_id='abc-123')
                         process_image_job({
@@ -246,8 +236,8 @@ class TestProcessImageJobWebhook:
                             'session_id': 'sess-456',
                             'filename': 'test.png'
                         })
-                        
-                        import time; time.sleep(0.5)
+
+                        time.sleep(0.5)
                         url, payload = mock_send.call_args[0]
                         assert payload['email'] == 'user@example.com'
                         assert payload['session_id'] == 'sess-456'
@@ -257,13 +247,13 @@ class TestProcessImageJobWebhook:
         """Webhook is dispatched with error payload when job fails."""
         with patch.dict(os.environ, {'WEBHOOK_URL': 'http://example.com/hook'}):
             with patch('app.queues.job_queue.process_image_job_sync', side_effect=Exception('OCR failed')):
-                with patch('app.utils.webhook.send_webhook') as mock_send:
+                with patch('app.queues.job_queue.send_webhook') as mock_send:
                     with patch('app.queues.job_queue.CurrentMessage') as mock_msg:
                         mock_msg.get_current_message.return_value = MagicMock(message_id='err-789')
                         with pytest.raises(Exception):
                             process_image_job({'image_file_path': '/tmp/test.png'})
-                        
-                        import time; time.sleep(0.5)
+
+                        time.sleep(0.5)
                         mock_send.assert_called_once()
                         url, payload = mock_send.call_args[0]
                         assert payload['message_id'] == 'err-789'
@@ -278,6 +268,5 @@ class TestProcessImageJobWebhook:
                 with patch('app.utils.webhook.send_webhook', side_effect=Exception('Webhook failed')):
                     with patch('app.queues.job_queue.CurrentMessage') as mock_msg:
                         mock_msg.get_current_message.return_value = MagicMock(message_id='abc-123')
-                        # Should not raise
                         result = process_image_job({'image_file_path': '/tmp/test.png'})
                         assert result['content'] == 'hello'
