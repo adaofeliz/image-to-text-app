@@ -53,7 +53,7 @@ services:
       - ./app:/app/app
       - ./logs:/app/logs
       - shared_files:/app/shared_files
-    shm_size: 2g
+    shm_size: 256m
     command: dramatiq app.queues.job_queue --processes 1 --threads 1
     restart: unless-stopped
     depends_on:
