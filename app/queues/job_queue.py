@@ -79,12 +79,14 @@ def _is_file_not_found_error(exc: Exception) -> bool:
 
 
 def _is_final_retry(message: Any) -> bool:
+    if message is None:
+        return False
     try:
         retries = message.options.get("retries", 0)
         max_retries = message.actor_options.get("max_retries", 3)
         return retries >= max_retries
     except Exception:
-        return True
+        return False
 
 
 @dramatiq.actor(store_results=True, max_retries=3, time_limit=300000)
@@ -107,7 +109,7 @@ def process_image_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         error = str(e)
         message = CurrentMessage.get_current_message()
-        is_final = message is None or _is_final_retry(message)
+        is_final = _is_final_retry(message)
 
         if _is_file_not_found_error(e):
             is_final = True
