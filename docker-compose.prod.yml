@@ -40,7 +40,7 @@ services:
     volumes:
       - ./logs:/app/logs
       - shared_files:/app/shared_files
-    command: dramatiq app.queues.job_queue --processes 1 --threads 8
+    command: dramatiq app.queues.job_queue --processes 1 --threads 1
     restart: unless-stopped
     depends_on:
       redis:
