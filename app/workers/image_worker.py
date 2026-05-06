@@ -1,5 +1,6 @@
 """Worker functions for processing image-to-text jobs."""
 
+import gc
 import os
 from pathlib import Path
 from typing import Dict, Any
@@ -14,7 +15,8 @@ from app.utils import (
 )
 from app.utils.logger import logger
 
-_OCR_MAX_SIDE = int(os.getenv("OCR_MAX_SIDE", "3500"))
+_OCR_MAX_SIDE = int(os.getenv("OCR_MAX_SIDE", "2500"))
+_OCR_CPU_THREADS = int(os.getenv("OCR_CPU_THREADS", "2"))
 
 # Lazy-loaded OCR instance
 _OCR = None
@@ -25,11 +27,15 @@ def _get_ocr() -> PaddleOCR:
     if _OCR is None:
         logger.info("Initializing PaddleOCR...")
         _OCR = PaddleOCR(
-            text_detection_model_name="PP-OCRv5_server_det",
-            text_recognition_model_name="PP-OCRv5_server_rec",
+            text_detection_model_name="PP-OCRv5_mobile_det",
+            text_recognition_model_name="PP-OCRv5_mobile_rec",
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False,
+            device="cpu",
+            cpu_threads=_OCR_CPU_THREADS,
+            enable_mkldnn=True,
+            mkldnn_cache_capacity=10,
         )
         logger.info("PaddleOCR initialized successfully")
     return _OCR
@@ -77,6 +83,8 @@ def process_image_job_sync(job_data: Dict[str, Any]) -> Dict[str, Any]:
     except RuntimeError:
         _reset_ocr()
         raise
+    finally:
+        gc.collect()
 
     rec_texts = extract_rec_texts(result)
     serializable_texts = convert_numpy_to_python(rec_texts)
