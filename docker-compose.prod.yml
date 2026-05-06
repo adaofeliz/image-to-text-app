@@ -37,9 +37,11 @@ services:
     environment:
       - WEBHOOK_URL=${WEBHOOK_URL:-}
       - DASHBOARD_TOKEN=${DASHBOARD_TOKEN:-}
+      - DISABLE_MODEL_SOURCE_CHECK=True
     volumes:
       - ./logs:/app/logs
       - shared_files:/app/shared_files
+    shm_size: 2g
     command: dramatiq app.queues.job_queue --processes 1 --threads 1
     restart: unless-stopped
     depends_on:
