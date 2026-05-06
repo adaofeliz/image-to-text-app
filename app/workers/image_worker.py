@@ -35,6 +35,12 @@ def _get_ocr() -> PaddleOCR:
     return _OCR
 
 
+def _reset_ocr() -> None:
+    global _OCR  # pylint: disable=global-statement
+    _OCR = None
+    logger.warning("PaddleOCR instance reset due to inference error; will re-initialize on next call")
+
+
 def _cap_image_size(image_file_path: str) -> None:
     path = Path(image_file_path)
     with Image.open(path) as img:
@@ -66,7 +72,11 @@ def process_image_job_sync(job_data: Dict[str, Any]) -> Dict[str, Any]:
     ocr = _get_ocr()
 
     logger.info("Running OCR on file: %s", image_file_path)
-    result = ocr.predict(image_file_path)
+    try:
+        result = ocr.predict(image_file_path)
+    except RuntimeError:
+        _reset_ocr()
+        raise
 
     rec_texts = extract_rec_texts(result)
     serializable_texts = convert_numpy_to_python(rec_texts)
